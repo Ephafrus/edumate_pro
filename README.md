@@ -20,7 +20,8 @@ staff chat in-app, and parents can request a teacher chat that admin approves.
 | **Enrollment** | Accepting + enrolling an application atomically creates the **learner record** and links it to the applying parent |
 | **Admin management** | Add **teachers** (phone-number invites), add/edit **learners**, create **classes**, **assign learners to classes**, **link learners to parents** |
 | **Payments** | Parents complete a **payment form** (purpose, method, amount, date, reference) and upload **proof of payment**; admin **approves/rejects** with a note |
-| **Email notifications (SMTP)** | Cloud Functions + **nodemailer** send email to parents on every application status change and payment review, via a `mailQueue` collection with an audit trail |
+| **QR attendance** | Every learner has a **QR code** (parents show it from their dashboard; admin can display/print it). **Teachers and all school staff scan it** — the child's details pop up and they mark **in school (present)** at drop-off or **left school** at pick-up. Each scan is recorded with who/when, the child's live in/out status shows on the parent dashboard, and **parents are emailed on every drop-off and departure**. A name search fallback covers forgotten cards or browsers without a camera |
+| **Email notifications (SMTP)** | Cloud Functions + **nodemailer** send email to parents on every application status change, payment review **and attendance scan**, via a `mailQueue` collection with an audit trail |
 | **In-app chat** | **Staff ↔ staff** chat works immediately. **Parents request a chat with a teacher**; the request (with reason + learner) goes to admin, and messaging unlocks only once **admin approves** |
 | **Teacher flow** | My classes → class register of assigned learners; staff chat |
 | **Theming** | User-configurable palette + light/dark, persisted locally |
@@ -192,7 +193,12 @@ flutter test
    approve payments → approve parent-teacher chat requests → add staff by
    phone number.
 3. **Teacher journey:** see assigned classes and their learner registers →
-   staff chat → chat with parents once admin approves the request.
+   **scan learner QR codes at the gate** (drop-off / pick-up) → staff chat →
+   chat with parents once admin approves the request.
+4. **Attendance:** parent shows the child's QR (dashboard → tap the child) →
+   any staff member scans it (`Scan` in the nav), checks the details, and
+   marks *in school* or *left school* → the event is logged and every linked
+   parent is emailed immediately.
 
 ## Known gaps / next steps
 

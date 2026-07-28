@@ -54,12 +54,14 @@ class AppShell extends StatelessWidget {
       case UserRole.teacher:
         return const [
           NavItem('My classes', Routes.teacherHome),
+          NavItem('Scan', Routes.scan),
           NavItem('Messages', Routes.chats),
           NavItem('My profile', Routes.profile),
         ];
       case UserRole.admin:
         return const [
           NavItem('Dashboard', Routes.adminHome),
+          NavItem('Scan', Routes.scan),
           NavItem('Applications', Routes.adminApplications),
           NavItem('Learners', Routes.adminLearners),
           NavItem('Classes', Routes.adminClasses),

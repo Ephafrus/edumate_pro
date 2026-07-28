@@ -36,6 +36,14 @@ class TeacherHomeScreen extends StatelessWidget {
                     ?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             DashboardTile(
+              icon: Icons.qr_code_scanner,
+              title: 'Scan attendance QR',
+              subtitle: 'Mark learners in at drop-off and out at pick-up — '
+                  'parents are notified',
+              onTap: () => context.go(Routes.scan),
+            ),
+            const SizedBox(height: 8),
+            DashboardTile(
               icon: Icons.chat_outlined,
               title: 'Messages',
               subtitle:

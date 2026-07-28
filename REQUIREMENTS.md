@@ -75,6 +75,21 @@ Cloud Storage · Cloud Functions (SMTP email via nodemailer).
   All mail flows through a `mailQueue` collection with a per-message outcome
   (`sent`/`error`) for auditing.
 
+### QR attendance (FR-19…FR-22)
+- **FR-19** Every learner has a **QR code** (encoding their learner id).
+  Parents display it from their dashboard; admin can display/print it from
+  learner management.
+- **FR-20** **Teachers and all school staff** can scan the code (camera
+  scanner with a name-search fallback). Scanning shows the **child's
+  details** (name, grade, class, DOB, current status, linked parents).
+- **FR-21** The staff member marks the child **In school / Present** at
+  drop-off, and **Left school** at pick-up. Each scan is stored as an
+  immutable attendance event (who scanned, when) and stamps the learner's
+  live in/out status.
+- **FR-22** **Linked parents are emailed on every scan** — when the child is
+  dropped at school and when they leave. The live status and recent scan
+  history are visible on the parent dashboard.
+
 ### In-app chat (FR-16…FR-18)
 - **FR-16** **Staff ↔ staff** chat: any admin/teacher starts a conversation
   with a colleague from the staff directory; messaging is immediate.
@@ -116,6 +131,8 @@ chats/{id}             type (staff|parentTeacher), participantUids[],
                        participantNames{}, approval, requestReason, learnerName,
                        lastMessage, updatedAt
 chats/{id}/messages/{id}  senderUid, senderName, text, createdAt
+attendance/{id}        learnerId, learnerName, className, type (checkIn|checkOut),
+                       byUid, byName, parentUids[], at
 mailQueue/{id}         to, subject, text, status (pending|sent|error), sentAt
 ```
 

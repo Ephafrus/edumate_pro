@@ -8,6 +8,7 @@ class Collections {
   static const applications = 'applications';
   static const payments = 'payments';
   static const chats = 'chats';
+  static const attendance = 'attendance';
   static const mailQueue = 'mailQueue';
   static const activity = 'activity';
 }

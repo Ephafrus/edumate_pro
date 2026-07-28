@@ -142,6 +142,55 @@ exports.onApplicationStatusChange = onDocumentUpdated(
       await queueMail(after.guardianEmail, mail.subject, mail.text);
     });
 
+/** Formats a timestamp in the school's local time (South Africa). */
+function localTime(ts) {
+  const d = ts && ts.toDate ? ts.toDate() : new Date();
+  return d.toLocaleString("en-ZA", {
+    timeZone: "Africa/Johannesburg",
+    weekday: "short", day: "numeric", month: "short",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
+
+/**
+ * Emails the linked parents whenever a staff member scans a learner's QR
+ * code — once at drop-off (checkIn) and once at pick-up (checkOut).
+ */
+exports.onAttendanceScan = onDocumentCreated(
+    "attendance/{id}",
+    async (event) => {
+      const snap = event.data;
+      if (!snap) return;
+      const a = snap.data();
+      const parentUids = a.parentUids || [];
+      if (parentUids.length === 0) return;
+
+      const learner = a.learnerName || "Your child";
+      const when = localTime(a.at);
+      const by = a.byName ? ` (scanned by ${a.byName})` : "";
+      const checkIn = a.type === "checkIn";
+      const subject = checkIn ?
+          `${learner} arrived at school` :
+          `${learner} has left school`;
+      const body = checkIn ?
+          `${learner} was dropped off and marked present at school at ` +
+          `${when}${by}.` :
+          `${learner} was signed out and has left school at ${when}${by}.`;
+
+      // One email per linked parent that has an address on their profile.
+      const userSnaps = await Promise.all(
+          parentUids.map((uid) => db.collection("users").doc(uid).get()));
+      await Promise.all(userSnaps.map((u) => {
+        if (!u.exists || !u.data().email) return null;
+        const first = u.data().firstName;
+        const text = (first ? `Dear ${first},\n\n` : `Dear parent,\n\n`) +
+            body +
+            `\n\nKind regards\nThe School Office\n` +
+            `(sent by EduMate Pro — please do not reply to this address)`;
+        return queueMail(u.data().email, subject, text);
+      }));
+    });
+
 /** Emails the parent when an admin approves/rejects their payment. */
 exports.onPaymentReviewed = onDocumentUpdated(
     "payments/{id}",

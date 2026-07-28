@@ -11,6 +11,7 @@ import '../../services/firestore_service.dart';
 import '../../state/auth_controller.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/common.dart';
+import '../../widgets/learner_qr_dialog.dart';
 
 /// Parent dashboard: linked children, enrollment applications with live
 /// status, and quick actions (apply, payments, messages).
@@ -88,12 +89,46 @@ class ParentHomeScreen extends StatelessWidget {
                                 l.className.isEmpty
                                     ? 'No class assigned yet'
                                     : 'Class: ${l.className}',
+                                if (l.attendanceStatus != null)
+                                  '${l.attendanceStatus!.stateLabel} since '
+                                      '${formatDateTime(l.lastAttendanceAt)}',
                               ].join(' · ')),
-                              trailing: StatusChip(
-                                l.status.label,
-                                l.status == LearnerStatus.active
-                                    ? Colors.green
-                                    : Colors.blueGrey,
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (l.attendanceStatus != null)
+                                    StatusChip(
+                                      l.attendanceStatus!.stateLabel,
+                                      l.isInSchool
+                                          ? Colors.green
+                                          : Colors.orange,
+                                    )
+                                  else
+                                    StatusChip(
+                                      l.status.label,
+                                      l.status == LearnerStatus.active
+                                          ? Colors.green
+                                          : Colors.blueGrey,
+                                    ),
+                                  IconButton(
+                                    tooltip: 'Show QR code',
+                                    icon: const Icon(Icons.qr_code_2),
+                                    onPressed: () => showDialog(
+                                      context: context,
+                                      builder: (_) => LearnerQrDialog(
+                                        learnerId: l.id,
+                                        learnerName: l.fullName,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              onTap: () => showDialog(
+                                context: context,
+                                builder: (_) => LearnerQrDialog(
+                                  learnerId: l.id,
+                                  learnerName: l.fullName,
+                                ),
                               ),
                             ))
                         .toList(),

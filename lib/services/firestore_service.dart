@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../core/constants.dart';
 import '../models/app_user.dart';
 import '../models/application.dart';
+import '../models/attendance.dart';
 import '../models/chat.dart';
 import '../models/enums.dart';
 import '../models/payment.dart';
@@ -123,6 +124,11 @@ class FirestoreService {
       .map((s) => s.docs.map(Learner.fromDoc).toList()
         ..sort((a, b) => a.fullName.compareTo(b.fullName)));
 
+  Future<Learner?> getLearner(String id) async {
+    final doc = await _db.collection(Collections.learners).doc(id).get();
+    return doc.exists ? Learner.fromDoc(doc) : null;
+  }
+
   Future<String> createLearner(Learner l) async {
     final ref = await _db.collection(Collections.learners).add(l.toMap());
     return ref.id;
@@ -148,6 +154,51 @@ class FirestoreService {
             ? FieldValue.arrayUnion([parentUid])
             : FieldValue.arrayRemove([parentUid]),
       });
+
+  // ---- QR attendance -------------------------------------------------------
+
+  /// Records a QR attendance scan: creates the attendance event and stamps
+  /// the learner's live status, atomically. The `onAttendanceScan` Cloud
+  /// Function emails the linked parents.
+  Future<void> recordAttendance(
+    Learner learner,
+    AttendanceType type, {
+    required AppUser by,
+  }) {
+    final eventRef = _db.collection(Collections.attendance).doc();
+    final learnerRef =
+        _db.collection(Collections.learners).doc(learner.id);
+    final record = AttendanceRecord(
+      id: eventRef.id,
+      learnerId: learner.id,
+      type: type,
+      learnerName: learner.fullName,
+      className: learner.className,
+      byUid: by.uid,
+      byName: by.fullName,
+      parentUids: learner.parentUids,
+    );
+
+    final batch = _db.batch();
+    batch.set(eventRef, record.toMap());
+    batch.update(learnerRef, {
+      'attendanceStatus': type.name,
+      'lastAttendanceAt': FieldValue.serverTimestamp(),
+    });
+    return batch.commit();
+  }
+
+  /// A learner's scan history, newest first (parents see their own children;
+  /// staff see all).
+  Stream<List<AttendanceRecord>> watchAttendanceForLearner(String learnerId,
+          {int limit = 20}) =>
+      _db
+          .collection(Collections.attendance)
+          .where('learnerId', isEqualTo: learnerId)
+          .orderBy('at', descending: true)
+          .limit(limit)
+          .snapshots()
+          .map((s) => s.docs.map(AttendanceRecord.fromDoc).toList());
 
   // ---- Enrollment applications --------------------------------------------
 

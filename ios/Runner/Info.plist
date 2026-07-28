@@ -4,6 +4,8 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>EduMate Pro uses the camera to scan learner QR codes for attendance (drop-off and pick-up).</string>
 	<key>CFBundleDisplayName</key>
 	<string>EduMate Pro</string>
 	<key>CFBundleExecutable</key>

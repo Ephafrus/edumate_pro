@@ -175,6 +175,24 @@ enum ChatApproval {
   }
 }
 
+/// A QR attendance scan event: arriving at school or leaving it.
+enum AttendanceType {
+  checkIn,
+  checkOut;
+
+  static AttendanceType fromString(String? s) =>
+      s == 'checkOut' ? AttendanceType.checkOut : AttendanceType.checkIn;
+
+  /// Label for the resulting state ("where is the child now").
+  String get stateLabel =>
+      this == AttendanceType.checkIn ? 'In school' : 'Left school';
+
+  /// Label for the action a staff member takes.
+  String get actionLabel => this == AttendanceType.checkIn
+      ? 'Mark as in school (present)'
+      : 'Mark as left school';
+}
+
 /// Identity document types captured on the enrollment form.
 enum IdType {
   saId,

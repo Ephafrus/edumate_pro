@@ -1,6 +1,7 @@
 // Smoke tests that don't require a live Firebase backend.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:edumate_pro/core/id_validation.dart';
+import 'package:edumate_pro/models/attendance.dart';
 import 'package:edumate_pro/models/enums.dart';
 import 'package:edumate_pro/services/auth_service.dart';
 
@@ -51,6 +52,19 @@ void main() {
     test('keeps international numbers', () {
       expect(AuthService.toE164('+27721234567'), '+27721234567');
       expect(AuthService.toE164('27721234567'), '+27721234567');
+    });
+  });
+
+  group('Attendance QR payload', () {
+    test('round-trips a learner id', () {
+      final data = AttendanceRecord.qrData('abc123');
+      expect(AttendanceRecord.learnerIdFromQr(data), 'abc123');
+    });
+
+    test('rejects foreign or empty codes', () {
+      expect(AttendanceRecord.learnerIdFromQr('https://example.com'), isNull);
+      expect(AttendanceRecord.learnerIdFromQr(null), isNull);
+      expect(AttendanceRecord.learnerIdFromQr('edumate-learner:'), isNull);
     });
   });
 

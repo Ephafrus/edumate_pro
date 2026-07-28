@@ -20,6 +20,7 @@ import '../screens/parent/application_detail_screen.dart';
 import '../screens/parent/application_wizard_screen.dart';
 import '../screens/parent/parent_home_screen.dart';
 import '../screens/parent/parent_payments_screen.dart';
+import '../screens/staff/scan_screen.dart';
 import '../screens/teacher/teacher_class_screen.dart';
 import '../screens/teacher/teacher_home_screen.dart';
 import '../state/auth_controller.dart';
@@ -51,6 +52,9 @@ class Routes {
   static const chats = '/chats';
   static const newChat = '/chats/new';
   static String chatThread(String id) => '/chats/$id';
+
+  /// QR attendance scanner — teachers and all school staff.
+  static const scan = '/scan';
 }
 
 /// Home path for a given role + profile-completion state.
@@ -100,7 +104,9 @@ GoRouter createRouter(AuthController auth) {
       // Role guards — each role stays inside its own area (+ shared routes).
       switch (role) {
         case UserRole.parent:
-          if (loc.startsWith('/admin') || loc.startsWith('/teacher')) {
+          if (loc.startsWith('/admin') ||
+              loc.startsWith('/teacher') ||
+              loc == Routes.scan) {
             return home;
           }
           break;
@@ -180,6 +186,9 @@ GoRouter createRouter(AuthController auth) {
       GoRoute(
           path: Routes.adminChatRequests,
           builder: (_, __) => const AdminChatRequestsScreen()),
+
+      // QR attendance scanner (staff only, guarded above)
+      GoRoute(path: Routes.scan, builder: (_, __) => const ScanScreen()),
 
       // Chat (all roles). `/chats/new` is declared before `/chats/:id` so the
       // literal segment wins.

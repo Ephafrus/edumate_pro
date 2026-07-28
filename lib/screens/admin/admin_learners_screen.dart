@@ -9,6 +9,7 @@ import '../../models/school.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/common.dart';
+import '../../widgets/learner_qr_dialog.dart';
 
 /// Learner management: add/edit learners, assign each to a class, and link
 /// learners to parent accounts (so parents see them and can pay for them).
@@ -173,6 +174,14 @@ class _LearnerCard extends StatelessWidget {
                       builder: (_) => _LinkParentsDialog(learner: l)),
                   icon: const Icon(Icons.family_restroom, size: 18),
                   label: const Text('Link parents'),
+                ),
+                TextButton.icon(
+                  onPressed: () => showDialog(
+                      context: context,
+                      builder: (_) => LearnerQrDialog(
+                          learnerId: l.id, learnerName: l.fullName)),
+                  icon: const Icon(Icons.qr_code_2, size: 18),
+                  label: const Text('QR code'),
                 ),
                 TextButton.icon(
                   onPressed: () async {

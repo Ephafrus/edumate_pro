@@ -76,11 +76,31 @@ service cloud.firestore {
 
     // ---- Learners ----------------------------------------------------------
     // Staff see all learners; a parent sees only learners linked to them.
+    // Any staff member may stamp the live attendance fields (QR scans), but
+    // only admin edits the record itself.
     match /learners/{id} {
       allow read: if isStaff()
                   || (isSignedIn()
                       && request.auth.uid in resource.data.parentUids);
-      allow write: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+                  || (isStaff()
+                      && request.resource.data.diff(resource.data)
+                          .affectedKeys()
+                          .hasOnly(['attendanceStatus', 'lastAttendanceAt']));
+    }
+
+    // ---- QR attendance events ---------------------------------------------
+    // Created by staff when scanning a learner's QR code; immutable after.
+    // Parents read their own children's events (parentUids is copied onto
+    // each event at scan time).
+    match /attendance/{id} {
+      allow read: if isStaff()
+                  || (isSignedIn()
+                      && request.auth.uid in resource.data.parentUids);
+      allow create: if isStaff()
+                  && request.resource.data.byUid == request.auth.uid;
+      allow update, delete: if isAdmin();
     }
 
     // ---- Enrollment applications ------------------------------------------

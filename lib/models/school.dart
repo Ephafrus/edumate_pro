@@ -67,6 +67,8 @@ class Learner {
     this.className = '',
     this.parentUids = const [],
     this.applicationId,
+    this.attendanceStatus,
+    this.lastAttendanceAt,
     this.createdAt,
   });
 
@@ -88,9 +90,14 @@ class Learner {
 
   /// The enrollment application this learner originated from, if any.
   final String? applicationId;
+
+  /// Last QR attendance scan: checkIn = in school, checkOut = left school.
+  final AttendanceType? attendanceStatus;
+  final DateTime? lastAttendanceAt;
   final DateTime? createdAt;
 
   String get fullName => '$firstName $lastName'.trim();
+  bool get isInSchool => attendanceStatus == AttendanceType.checkIn;
 
   Map<String, dynamic> toMap() => {
         'firstName': firstName,
@@ -105,6 +112,10 @@ class Learner {
         'className': className,
         'parentUids': parentUids,
         'applicationId': applicationId,
+        'attendanceStatus': attendanceStatus?.name,
+        'lastAttendanceAt': lastAttendanceAt != null
+            ? Timestamp.fromDate(lastAttendanceAt!)
+            : null,
         'createdAt': createdAt != null
             ? Timestamp.fromDate(createdAt!)
             : FieldValue.serverTimestamp(),
@@ -126,6 +137,10 @@ class Learner {
       parentUids:
           ((m['parentUids'] as List?) ?? const []).map((e) => '$e').toList(),
       applicationId: m['applicationId'] as String?,
+      attendanceStatus: m['attendanceStatus'] == null
+          ? null
+          : AttendanceType.fromString(m['attendanceStatus'] as String?),
+      lastAttendanceAt: (m['lastAttendanceAt'] as Timestamp?)?.toDate(),
       createdAt: (m['createdAt'] as Timestamp?)?.toDate(),
     );
   }
@@ -155,6 +170,8 @@ class Learner {
         className: className ?? this.className,
         parentUids: parentUids ?? this.parentUids,
         applicationId: applicationId,
+        attendanceStatus: attendanceStatus,
+        lastAttendanceAt: lastAttendanceAt,
         createdAt: createdAt,
       );
 }

@@ -40,6 +40,13 @@ class AdminHomeScreen extends StatelessWidget {
             Text('Everything that needs your attention, in one place.',
                 style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 16),
+            DashboardTile(
+              icon: Icons.qr_code_scanner,
+              title: 'Scan attendance QR',
+              subtitle: 'Mark learners in at drop-off and out at pick-up',
+              onTap: () => context.go(Routes.scan),
+            ),
+            const SizedBox(height: 8),
             StreamBuilder<List<EnrollmentApplication>>(
               stream: db.watchApplications(),
               builder: (context, snap) {
