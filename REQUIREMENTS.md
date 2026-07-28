@@ -13,11 +13,44 @@ app using school-configured settings.
 
 | Role | Summary |
 |------|---------|
-| **School admin** | Runs the platform: staff, learners, classes, applications, payments, chat approvals |
+| **Super Admin** | Platform level: creates schools and assigns the admins/principals who run each one |
+| **Principal** | Leads a school; same management rights as the school admin |
+| **School admin** | Runs the school: staff, learners, classes, subjects, applications, payments, fees, chat approvals |
 | **Teacher** | Sees assigned classes and learners; chats with staff and approved parents |
 | **Parent** | Applies for children, tracks applications, submits payments, requests teacher chats |
 
 ## 2. Functional requirements
+
+### Multi-school platform (FR-33…FR-36)
+- **FR-33** A **Super Admin** creates a school (name, address, contacts) and
+  can suspend it.
+- **FR-34** The Super Admin **assigns an admin or principal** to a school by
+  phone number — granted immediately if that person already has an account,
+  otherwise as an invitation that activates on their first sign-in.
+- **FR-35** All school data is stored under `schools/{schoolId}/…`; access
+  requires a membership at that school, checked in security rules.
+- **FR-36** A person may belong to **several schools**, with a different role
+  at each. Admins, principals and teachers see every school they are assigned
+  to and switch between them from the app bar; parents may join more than one
+  school if their children attend different schools.
+
+### Subjects & academics (FR-37…FR-41)
+- **FR-37** A school admin **creates classes, adds subjects** to them and
+  assigns the teacher for each subject.
+- **FR-38** Teachers sign in and see **their own classes and subjects**.
+- **FR-39** Teachers create assessments (title, term, total, date) and
+  **capture marks per learner per subject** on a batch mark sheet;
+  re-capturing overwrites cleanly.
+- **FR-40** **Progress reports**: per-subject averages, trend and symbol
+  bands — school-wide for admin (class by class) and per child for parents.
+- **FR-41** Teachers publish **dated lesson plans** and set **homework with
+  due dates** and optional uploaded worksheets; parents see both against
+  their child.
+
+### Search (FR-42)
+- **FR-42** Role-scoped search: Super Admin over schools; admins/principals
+  over learners, classes, subjects, staff, parents and applications;
+  teachers over their own classes, subjects and learners.
 
 ### Authentication (FR-1…FR-3)
 - **FR-1** All users sign in with **Firebase Phone Auth** (phone number + SMS

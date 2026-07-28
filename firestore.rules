@@ -1,9 +1,18 @@
 rules_version = '2';
 
-// EduMate Pro Firestore security rules.
-// Roles live on the user record: users/{uid}.role in {admin, teacher, parent}.
-// Everyone authenticates with Firebase Phone Auth, so request.auth.token
-// carries the verified phone_number used to match staff invites.
+// EduMate Pro Firestore security rules — multi-school.
+//
+// Shape:
+//   users/{uid}                          global account (superAdmin flag)
+//   schools/{schoolId}                   a school
+//   schools/{schoolId}/members/{uid}     membership + role at that school
+//   schools/{schoolId}/<everything else> that school's data
+//   staffInvites/{id}                    phone + school + role, pre sign-in
+//
+// Authorisation is membership-based: a request may only touch a school's
+// data if the caller has a member document there, and management actions
+// require the admin or principal role at *that* school. A person can hold
+// different roles at different schools; each is checked independently.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -13,225 +22,289 @@ service cloud.firestore {
     function isSelf(uid) {
       return isSignedIn() && request.auth.uid == uid;
     }
-    function me() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-    function myRole() {
-      return me().role;
-    }
-    function isAdmin() {
-      return isSignedIn() && myRole() == 'admin';
-    }
-    function isStaff() {
-      return isSignedIn() && myRole() in ['admin', 'teacher'];
-    }
     function myPhone() {
       return request.auth.token.phone_number;
     }
-    function hasInvite() {
-      return myPhone() != null
-        && exists(/databases/$(database)/documents/staffInvites/$(myPhone()));
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
-    function inviteData() {
-      return get(/databases/$(database)/documents/staffInvites/$(myPhone())).data;
+    function isSuperAdmin() {
+      return isSignedIn() && userDoc().superAdmin == true;
     }
 
-    // ---- Accounts ----------------------------------------------------------
-    // Self-creation on first sign-in: parents by default; a staff role is
-    // only allowed when an unclaimed invite for the verified phone number
-    // grants it. Users can never escalate their own role afterwards.
+    // ---- Membership helpers (scoped to one school) -------------------------
+    function memberPath(schoolId) {
+      return /databases/$(database)/documents/schools/$(schoolId)/members/$(request.auth.uid);
+    }
+    function isMember(schoolId) {
+      return isSignedIn() && exists(memberPath(schoolId));
+    }
+    function myRole(schoolId) {
+      return get(memberPath(schoolId)).data.role;
+    }
+    // Admins and principals both run the school.
+    function isManager(schoolId) {
+      return isMember(schoolId) && myRole(schoolId) in ['admin', 'principal'];
+    }
+    function isStaff(schoolId) {
+      return isMember(schoolId)
+        && myRole(schoolId) in ['admin', 'principal', 'teacher'];
+    }
+    function isParentAt(schoolId) {
+      return isMember(schoolId) && myRole(schoolId) == 'parent';
+    }
+
+    // ---- Global accounts ---------------------------------------------------
+    // A user creates and maintains their own record and can never grant
+    // themselves platform powers. Super Admins may read anyone (to assign
+    // them to a school) and promote other Super Admins.
     match /users/{uid} {
-      allow read: if isSelf(uid)
-                  || isStaff()
-                  // Parents may list teachers (to request a chat).
-                  || (isSignedIn() && resource.data.role == 'teacher');
+      allow read: if isSelf(uid) || isSuperAdmin();
       allow create: if isSelf(uid)
-                  && (request.resource.data.role == 'parent'
-                      || (hasInvite()
-                          && inviteData().claimedByUid == null
-                          && request.resource.data.role == inviteData().role));
-      allow update: if isAdmin()
-                  || (isSelf(uid)
-                      && request.resource.data.role == resource.data.role);
-      allow delete: if isAdmin();
+                    && request.resource.data.get('superAdmin', false) == false;
+      allow update: if isSuperAdmin()
+                    || (isSelf(uid)
+                        && request.resource.data.get('superAdmin', false)
+                            == resource.data.get('superAdmin', false));
+      allow delete: if isSuperAdmin();
     }
 
-    // ---- Staff invites (doc id = E.164 phone number) ----------------------
-    // Admin manages invites; the invited phone may read its own invite and
-    // mark it claimed (with their own uid) during first sign-in.
-    match /staffInvites/{phone} {
-      allow read: if isAdmin() || (isSignedIn() && phone == myPhone());
-      allow create, delete: if isAdmin();
-      allow update: if isAdmin()
-                  || (isSignedIn()
-                      && phone == myPhone()
-                      && request.resource.data.claimedByUid == request.auth.uid);
-    }
-
-    // ---- Classes -----------------------------------------------------------
-    match /classes/{id} {
+    // ---- Schools -----------------------------------------------------------
+    // Any signed-in user may read the school list (parents choose one to
+    // join); only Super Admins create or change schools.
+    match /schools/{schoolId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
-    }
+      allow create, update, delete: if isSuperAdmin();
 
-    // ---- Learners ----------------------------------------------------------
-    // Staff see all learners; a parent sees only learners linked to them.
-    // Any staff member may stamp the live attendance fields (QR scans), but
-    // only admin edits the record itself.
-    match /learners/{id} {
-      allow read: if isStaff()
-                  || (isSignedIn()
-                      && request.auth.uid in resource.data.parentUids);
-      allow create, delete: if isAdmin();
-      allow update: if isAdmin()
-                  || (isStaff()
-                      && request.resource.data.diff(resource.data)
-                          .affectedKeys()
-                          .hasOnly(['attendanceStatus', 'lastAttendanceAt']));
-    }
-
-    // ---- QR attendance events ---------------------------------------------
-    // Created by staff when scanning a learner's QR code; immutable after.
-    // Parents read their own children's events (parentUids is copied onto
-    // each event at scan time).
-    match /attendance/{id} {
-      allow read: if isStaff()
-                  || (isSignedIn()
-                      && request.auth.uid in resource.data.parentUids);
-      allow create: if isStaff()
-                  && request.resource.data.byUid == request.auth.uid;
-      allow update, delete: if isAdmin();
-    }
-
-    // ---- Enrollment applications ------------------------------------------
-    // A parent owns their application while it is a draft; once submitted,
-    // only staff move it through the pipeline.
-    match /applications/{id} {
-      allow read: if isStaff()
-                  || (isSignedIn() && resource.data.parentUid == request.auth.uid);
-      allow create: if isSignedIn()
-                  && request.resource.data.parentUid == request.auth.uid
-                  && request.resource.data.status == 'draft';
-      allow update: if isAdmin()
-                  || (isSignedIn()
-                      && resource.data.parentUid == request.auth.uid
-                      && resource.data.status == 'draft'
-                      && request.resource.data.status in ['draft', 'submitted']);
-      allow delete: if isAdmin()
-                  || (isSignedIn()
-                      && resource.data.parentUid == request.auth.uid
-                      && resource.data.status == 'draft');
-    }
-
-    // ---- Payments ----------------------------------------------------------
-    // Parents submit (status pending); admin reviews, records office
-    // payments directly and creates records from approved bulk imports.
-    match /payments/{id} {
-      allow read: if isAdmin()
-                  || (isSignedIn() && resource.data.parentUid == request.auth.uid);
-      allow create: if isAdmin()
-                  || (isSignedIn()
-                      && request.resource.data.parentUid == request.auth.uid
-                      && request.resource.data.status == 'pending');
-      allow update, delete: if isAdmin();
-    }
-
-    // ---- Fee structures & bulk payment imports ------------------------------
-    // Fee amounts are visible to any signed-in user; only admin configures.
-    match /feeStructures/{id} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
-    }
-    // Staged CSV uploads — admin-only workspace.
-    match /paymentImports/{id} {
-      allow read, write: if isAdmin();
-    }
-
-    // ---- School settings (SMTP email, …) -----------------------------------
-    // Staff read (teachers' attendance scans send email too); admin writes.
-    match /settings/{doc} {
-      allow read: if isStaff();
-      allow write: if isAdmin();
-    }
-
-    // ---- Broadcast messages -------------------------------------------------
-    // Composed by admin; each recipient parent reads their own.
-    match /broadcasts/{id} {
-      allow read: if isStaff()
-                  || (isSignedIn()
-                      && request.auth.uid in resource.data.recipientUids);
-      allow create, update, delete: if isAdmin();
-    }
-
-    // ---- Calendar events ----------------------------------------------------
-    // Everyone signed in can read (the app filters by audience). Admin
-    // manages any event; a teacher manages events for classes they teach.
-    match /events/{id} {
-      function teachesClass(classId) {
-        return classId != null
-          && get(/databases/$(database)/documents/classes/$(classId))
-              .data.teacherUid == request.auth.uid;
+      // ---- Membership ------------------------------------------------------
+      // Readable by the school's staff (directory) and by the person the
+      // membership belongs to. A parent may join a school themselves; only a
+      // manager or Super Admin may grant a staff role.
+      match /members/{uid} {
+        allow read: if isSuperAdmin()
+                    || isSelf(uid)
+                    || isStaff(schoolId);
+        allow create: if isSuperAdmin()
+                      || isManager(schoolId)
+                      || (isSelf(uid)
+                          && request.resource.data.role == 'parent');
+        allow update: if isSuperAdmin()
+                      || isManager(schoolId)
+                      || (isSelf(uid)
+                          && request.resource.data.role == resource.data.role);
+        allow delete: if isSuperAdmin() || isManager(schoolId);
       }
-      allow read: if isSignedIn();
-      allow create: if isAdmin()
-                  || (isStaff()
-                      && request.resource.data.audience == 'schoolClass'
-                      && teachesClass(request.resource.data.classId));
-      allow update, delete: if isAdmin()
-                  || (isStaff()
-                      && resource.data.createdByUid == request.auth.uid);
-    }
 
-    // ---- Chat --------------------------------------------------------------
-    // Staff chats are created approved by a staff participant. Parent-teacher
-    // chats are created as approval requests by the parent; only an admin may
-    // change the approval state. Participants may update thread metadata
-    // (last message preview) but never the approval.
-    match /chats/{id} {
-      function isParticipant() {
-        return isSignedIn()
-          && request.auth.uid in resource.data.participantUids;
+      // ---- Classes & subjects ---------------------------------------------
+      match /classes/{id} {
+        allow read: if isMember(schoolId);
+        allow write: if isManager(schoolId);
       }
-      allow read: if isAdmin() || isParticipant();
-      allow create: if isSignedIn()
-                  && request.auth.uid in request.resource.data.participantUids
-                  && (
-                    (request.resource.data.type == 'staff'
-                     && isStaff())
-                    || (request.resource.data.type == 'parentTeacher'
-                        && request.resource.data.approval == 'requested')
-                  );
-      allow update: if isAdmin()
-                  || (isParticipant()
-                      && request.resource.data.approval == resource.data.approval
-                      && request.resource.data.participantUids
-                          == resource.data.participantUids);
-      allow delete: if isAdmin();
+      match /subjects/{id} {
+        allow read: if isMember(schoolId);
+        allow write: if isManager(schoolId);
+      }
 
-      // Messages: participants only, and only while the thread is approved.
-      match /messages/{msgId} {
-        function thread() {
-          return get(/databases/$(database)/documents/chats/$(id)).data;
+      // ---- Learners --------------------------------------------------------
+      // Staff see every learner; a parent sees only their own children.
+      // Any staff member may stamp the live attendance fields (QR scans).
+      match /learners/{id} {
+        allow read: if isStaff(schoolId)
+                    || (isSignedIn()
+                        && request.auth.uid in resource.data.parentUids);
+        allow create, delete: if isManager(schoolId);
+        allow update: if isManager(schoolId)
+                    || (isStaff(schoolId)
+                        && request.resource.data.diff(resource.data)
+                            .affectedKeys()
+                            .hasOnly(['attendanceStatus', 'lastAttendanceAt']));
+      }
+
+      // ---- QR attendance ---------------------------------------------------
+      match /attendance/{id} {
+        allow read: if isStaff(schoolId)
+                    || (isSignedIn()
+                        && request.auth.uid in resource.data.parentUids);
+        allow create: if isStaff(schoolId)
+                    && request.resource.data.byUid == request.auth.uid;
+        allow update, delete: if isManager(schoolId);
+      }
+
+      // ---- Assessments & marks ---------------------------------------------
+      // Teachers capture marks for the subjects they teach; managers see and
+      // manage everything; parents read their own children's marks.
+      match /assessments/{id} {
+        allow read: if isStaff(schoolId);
+        allow create, update: if isStaff(schoolId);
+        allow delete: if isManager(schoolId)
+                    || (isStaff(schoolId)
+                        && resource.data.createdByUid == request.auth.uid);
+      }
+      match /marks/{id} {
+        allow read: if isStaff(schoolId)
+                    || (isSignedIn()
+                        && request.auth.uid in resource.data.parentUids);
+        allow create, update: if isStaff(schoolId);
+        allow delete: if isManager(schoolId);
+      }
+
+      // ---- Lesson plans & homework ------------------------------------------
+      // Published to the class: staff write, and members read (parents see
+      // what their children are doing).
+      match /lessonPlans/{id} {
+        allow read: if isMember(schoolId);
+        allow create, update: if isStaff(schoolId);
+        allow delete: if isManager(schoolId)
+                    || (isStaff(schoolId)
+                        && resource.data.teacherUid == request.auth.uid);
+      }
+      match /homework/{id} {
+        allow read: if isMember(schoolId);
+        allow create, update: if isStaff(schoolId);
+        allow delete: if isManager(schoolId)
+                    || (isStaff(schoolId)
+                        && resource.data.teacherUid == request.auth.uid);
+      }
+
+      // ---- Enrollment applications ------------------------------------------
+      // A parent owns their application while it is a draft; once submitted,
+      // only staff move it through the pipeline.
+      match /applications/{id} {
+        allow read: if isStaff(schoolId)
+                    || (isSignedIn()
+                        && resource.data.parentUid == request.auth.uid);
+        allow create: if isParentAt(schoolId)
+                    && request.resource.data.parentUid == request.auth.uid
+                    && request.resource.data.status == 'draft';
+        allow update: if isManager(schoolId)
+                    || (isSignedIn()
+                        && resource.data.parentUid == request.auth.uid
+                        && resource.data.status == 'draft'
+                        && request.resource.data.status in ['draft', 'submitted']);
+        allow delete: if isManager(schoolId)
+                    || (isSignedIn()
+                        && resource.data.parentUid == request.auth.uid
+                        && resource.data.status == 'draft');
+      }
+
+      // ---- Payments & fees ---------------------------------------------------
+      match /payments/{id} {
+        allow read: if isManager(schoolId)
+                    || (isSignedIn()
+                        && resource.data.parentUid == request.auth.uid);
+        allow create: if isManager(schoolId)
+                    || (isParentAt(schoolId)
+                        && request.resource.data.parentUid == request.auth.uid
+                        && request.resource.data.status == 'pending');
+        allow update, delete: if isManager(schoolId);
+      }
+      match /feeStructures/{id} {
+        allow read: if isMember(schoolId);
+        allow write: if isManager(schoolId);
+      }
+      match /paymentImports/{id} {
+        allow read, write: if isManager(schoolId);
+      }
+
+      // ---- School settings (SMTP email, …) ------------------------------------
+      match /settings/{doc} {
+        allow read: if isStaff(schoolId);
+        allow write: if isManager(schoolId);
+      }
+
+      // ---- Broadcast messages -------------------------------------------------
+      match /broadcasts/{id} {
+        allow read: if isStaff(schoolId)
+                    || (isSignedIn()
+                        && request.auth.uid in resource.data.recipientUids);
+        allow create, update, delete: if isManager(schoolId);
+      }
+
+      // ---- Calendar events ----------------------------------------------------
+      match /events/{id} {
+        function teachesClass(classId) {
+          return classId != null
+            && get(/databases/$(database)/documents/schools/$(schoolId)/classes/$(classId))
+                .data.teacherUid == request.auth.uid;
         }
-        allow read: if isSignedIn()
-                    && (request.auth.uid in thread().participantUids
-                        || isAdmin());
-        allow create: if isSignedIn()
-                    && request.resource.data.senderUid == request.auth.uid
-                    && request.auth.uid in thread().participantUids
-                    && thread().approval == 'approved';
-        allow update, delete: if false;
+        allow read: if isMember(schoolId);
+        allow create: if isManager(schoolId)
+                    || (isStaff(schoolId)
+                        && request.resource.data.audience == 'schoolClass'
+                        && teachesClass(request.resource.data.classId));
+        allow update, delete: if isManager(schoolId)
+                    || (isStaff(schoolId)
+                        && resource.data.createdByUid == request.auth.uid);
+      }
+
+      // ---- Chat ----------------------------------------------------------------
+      match /chats/{id} {
+        function isParticipant() {
+          return isSignedIn()
+            && request.auth.uid in resource.data.participantUids;
+        }
+        allow read: if isManager(schoolId) || isParticipant();
+        allow create: if isMember(schoolId)
+                    && request.auth.uid in request.resource.data.participantUids
+                    && (
+                      (request.resource.data.type == 'staff'
+                       && isStaff(schoolId))
+                      || (request.resource.data.type == 'parentTeacher'
+                          && request.resource.data.approval == 'requested')
+                    );
+        allow update: if isManager(schoolId)
+                    || (isParticipant()
+                        && request.resource.data.approval == resource.data.approval
+                        && request.resource.data.participantUids
+                            == resource.data.participantUids);
+        allow delete: if isManager(schoolId);
+
+        match /messages/{msgId} {
+          function thread() {
+            return get(/databases/$(database)/documents/schools/$(schoolId)/chats/$(id)).data;
+          }
+          allow read: if isSignedIn()
+                      && (request.auth.uid in thread().participantUids
+                          || isManager(schoolId));
+          allow create: if isSignedIn()
+                      && request.resource.data.senderUid == request.auth.uid
+                      && request.auth.uid in thread().participantUids
+                      && thread().approval == 'approved';
+          allow update, delete: if false;
+        }
+      }
+
+      // ---- Outgoing mail audit trail / outbox ----------------------------------
+      match /mailQueue/{id} {
+        allow read: if isStaff(schoolId);
+        allow create, update: if isStaff(schoolId);
+        allow delete: if isManager(schoolId);
       }
     }
 
-    // ---- Outgoing mail audit trail / outbox --------------------------------
-    // Email is sent from the app by staff (admin actions, teachers'
-    // attendance scans); every message is logged here, and unsent ones are
-    // retried by staff sessions.
-    match /mailQueue/{id} {
-      allow read: if isStaff();
-      allow create, update: if isStaff();
-      allow delete: if isAdmin();
+    // ---- Collection-group read of memberships --------------------------------
+    // Lets a user list *all* the schools they belong to in one query, which is
+    // what powers the school switcher. Constrained to their own uid.
+    match /{path=**}/members/{uid} {
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // ---- Staff invites ---------------------------------------------------------
+    // Created by a Super Admin (school admins/principals) or a school manager
+    // (teachers). The invitee may read and claim invites for their own verified
+    // phone number at first sign-in.
+    match /staffInvites/{id} {
+      allow read: if isSuperAdmin()
+                  || (isSignedIn() && resource.data.phone == myPhone())
+                  || (isSignedIn() && isManager(resource.data.schoolId));
+      allow create: if isSuperAdmin()
+                  || isManager(request.resource.data.schoolId);
+      allow update: if isSuperAdmin()
+                  || isManager(resource.data.schoolId)
+                  || (isSignedIn()
+                      && resource.data.phone == myPhone()
+                      && request.resource.data.claimedByUid == request.auth.uid);
+      allow delete: if isSuperAdmin() || isManager(resource.data.schoolId);
     }
   }
 }

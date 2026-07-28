@@ -12,7 +12,12 @@ staff chat in-app, and parents can request a teacher chat that admin approves.
 
 | Area | What's implemented |
 |------|--------------------|
-| **Roles** | School admin, Teacher, Parent — role-based navigation & route guards |
+| **Multi-school platform** | A **Super Admin** sets schools up and assigns each school's **admins/principals**. Every school's data lives under `schools/{id}/…` and is fully isolated. Anyone assigned to **more than one school** (admin, principal or teacher) sees them all and switches with one tap from the app bar |
+| **Roles** | Super Admin (platform) · School admin · Principal · Teacher · Parent — role-based navigation & route guards, enforced in security rules |
+| **Subjects & academics** | Admin adds **subjects to a class** and assigns the teacher. Teachers create **assessments** and capture **marks per learner per subject** on a batch mark sheet |
+| **Progress reports** | Per-subject averages, trend and symbols — a school-wide view for admin (class by class) and a **child-progress dashboard for parents** |
+| **Lesson plans & homework** | Teachers publish **dated lesson plans** (day or date range) and set **homework with due dates** plus optional uploaded worksheets; parents see both on their child's page |
+| **Search** | Role-scoped search: Super Admin finds schools; admins/principals find learners, classes, subjects, staff, parents and applications; teachers find their own classes, subjects and learners |
 | **Auth** | **Firebase Phone Auth for everyone**: sign in with a cell number + SMS one-time code (country picker + segmented OTP input). New numbers become parent accounts; staff numbers (pre-added by admin) become teacher/admin accounts automatically on first sign-in |
 | **Profiles** | Every authenticated user is presented with **Create a profile** (name + email + address) — for parents this unlocks *Apply for a child*, and the email receives school notifications |
 | **Enrollment applications** | Modern, responsive **step-by-step wizard**: Learner details → Parent/guardian → Medical & emergency → Supporting documents (uploads) → Review & submit. Drafts auto-save per step and can be resumed |
@@ -36,12 +41,15 @@ staff chat in-app, and parents can request a teacher chat that admin approves.
 ```
 lib/
   core/         constants (grades, languages, provinces), theme, responsive, SA ID validation
-  models/       user & staff invites, classes/learners, applications, payments, chat
+  models/       users & memberships, schools, classes/learners, subjects,
+                academics (assessments, marks, lesson plans, homework),
+                applications, payments/fees, chat, broadcasts, calendar
   services/     auth (phone OTP), firestore, storage
   state/        AuthController, ThemeController (Provider/ChangeNotifier)
   router/       go_router config + role-based redirect guards
   widgets/      responsive AppShell, phone auth form, upload button, shared UI
-  screens/      common · auth · parent · teacher · admin · chat
+  screens/      common · auth · superadmin · admin · teacher · parent · chat · staff
+docs/status-report.html   project/deliverable status report
 firestore.rules / storage.rules   security rules
 ```
 
@@ -72,11 +80,12 @@ firestore.rules / storage.rules   security rules
    ```bash
    firebase deploy --only firestore,storage
    ```
-6. **Bootstrap the first School Admin:** sign in once in the app with the
-   admin's phone number (this creates a parent account), then in Firestore edit
-   `users/{uid}` → set `"role": "admin"`. From then on that admin adds further
-   staff **inside the app** (Staff → *Add staff member*), which pre-provisions
-   their phone number — no console needed again.
+6. **Bootstrap the first Super Admin:** sign in once in the app with that
+   person's phone number, then in Firestore edit `users/{uid}` → set
+   `"superAdmin": true`. Everything else happens in the app: the Super Admin
+   creates schools and assigns each school's admin/principal by phone number,
+   and those admins then add teachers themselves. A person's school access
+   activates automatically the next time they sign in.
 
 ## Phone authentication (SMS) setup
 

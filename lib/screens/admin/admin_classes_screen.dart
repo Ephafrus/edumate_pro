@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants.dart';
 import '../../core/responsive.dart';
+import '../../models/academics.dart';
 import '../../models/app_user.dart';
 import '../../models/enums.dart';
 import '../../models/school.dart';
@@ -78,6 +79,16 @@ class AdminClassesScreen extends StatelessWidget {
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
+                                  IconButton(
+                                    tooltip: 'Subjects',
+                                    icon: const Icon(
+                                        Icons.menu_book_outlined,
+                                        size: 20),
+                                    onPressed: () => showDialog(
+                                        context: context,
+                                        builder: (_) =>
+                                            _SubjectsDialog(schoolClass: c)),
+                                  ),
                                   IconButton(
                                     tooltip: 'Edit',
                                     icon: const Icon(Icons.edit_outlined,
@@ -269,6 +280,193 @@ class _EditClassDialogState extends State<_EditClassDialog> {
                   width: 18,
                   child: CircularProgressIndicator(strokeWidth: 2))
               : const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Manage the subjects taught in a class: add a subject and assign the
+/// teacher who teaches it. That teacher then captures marks, lesson plans
+/// and homework against the subject.
+class _SubjectsDialog extends StatefulWidget {
+  const _SubjectsDialog({required this.schoolClass});
+  final SchoolClass schoolClass;
+
+  @override
+  State<_SubjectsDialog> createState() => _SubjectsDialogState();
+}
+
+class _SubjectsDialogState extends State<_SubjectsDialog> {
+  final _name = TextEditingController();
+  String? _teacherUid;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  Future<void> _add(List<AppUser> teachers) async {
+    final name = _name.text.trim();
+    if (name.isEmpty) {
+      showSnack(context, 'Enter a subject name');
+      return;
+    }
+    final db = context.read<FirestoreService>();
+    setState(() => _saving = true);
+    try {
+      final teacher =
+          teachers.where((t) => t.uid == _teacherUid).firstOrNull;
+      await db.createSubject(Subject(
+        id: '',
+        name: name,
+        classId: widget.schoolClass.id,
+        className: widget.schoolClass.name,
+        teacherUid: teacher?.uid,
+        teacherName: teacher?.fullName ?? '',
+      ));
+      _name.clear();
+      setState(() => _teacherUid = null);
+    } catch (e) {
+      if (mounted) showSnack(context, 'Could not add: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final db = context.read<FirestoreService>();
+
+    return AlertDialog(
+      title: Text('Subjects — ${widget.schoolClass.name}'),
+      content: SizedBox(
+        width: 520,
+        height: 460,
+        child: StreamBuilder<List<AppUser>>(
+          stream: db.watchUsersByRole(UserRole.teacher),
+          builder: (context, teacherSnap) {
+            final teachers = teacherSnap.data ?? [];
+            return Column(
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: _name,
+                        decoration: const InputDecoration(
+                            labelText: 'Subject',
+                            hintText: 'e.g. Mathematics'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: teachers.any((t) => t.uid == _teacherUid)
+                            ? _teacherUid
+                            : null,
+                        isExpanded: true,
+                        decoration:
+                            const InputDecoration(labelText: 'Teacher'),
+                        items: teachers
+                            .map((t) => DropdownMenuItem(
+                                value: t.uid, child: Text(t.fullName)))
+                            .toList(),
+                        onChanged: (v) => setState(() => _teacherUid = v),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.filled(
+                      tooltip: 'Add subject',
+                      onPressed: _saving ? null : () => _add(teachers),
+                      icon: const Icon(Icons.add),
+                    ),
+                  ],
+                ),
+                const Divider(height: 24),
+                Expanded(
+                  child: StreamBuilder<List<Subject>>(
+                    stream: db.watchSubjectsForClass(widget.schoolClass.id),
+                    builder: (context, snap) {
+                      if (!snap.hasData) {
+                        return const Center(
+                            child: CircularProgressIndicator());
+                      }
+                      final subjects = snap.data!;
+                      if (subjects.isEmpty) {
+                        return const EmptyState(
+                            'No subjects yet — add the first one above.',
+                            icon: Icons.menu_book_outlined);
+                      }
+                      return ListView(
+                        children: subjects
+                            .map((s) => ListTile(
+                                  leading:
+                                      const Icon(Icons.menu_book_outlined),
+                                  title: Text(s.name),
+                                  subtitle: Text(s.teacherName.isEmpty
+                                      ? 'No teacher assigned'
+                                      : s.teacherName),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      PopupMenuButton<String>(
+                                        tooltip: 'Assign teacher',
+                                        icon: const Icon(Icons.person_outline),
+                                        onSelected: (uid) {
+                                          final t = teachers
+                                              .where((t) => t.uid == uid)
+                                              .firstOrNull;
+                                          db.updateSubject(s.id, {
+                                            'teacherUid': t?.uid,
+                                            'teacherName': t?.fullName ?? '',
+                                          });
+                                        },
+                                        itemBuilder: (_) => teachers
+                                            .map((t) => PopupMenuItem(
+                                                value: t.uid,
+                                                child: Text(t.fullName)))
+                                            .toList(),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Delete subject',
+                                        icon: const Icon(
+                                            Icons.delete_outline),
+                                        onPressed: () async {
+                                          final ok = await confirmDialog(
+                                            context,
+                                            'Delete ${s.name}?',
+                                            'Marks already captured stay on '
+                                                'record.',
+                                            confirmLabel: 'Delete',
+                                          );
+                                          if (ok) {
+                                            await db.deleteSubject(s.id);
+                                          }
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ))
+                            .toList(),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Done'),
         ),
       ],
     );

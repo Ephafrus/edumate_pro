@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/constants.dart';
+import '../models/academics.dart';
 import '../models/app_user.dart';
 import '../models/application.dart';
 import '../models/attendance.dart';
@@ -15,11 +16,107 @@ import '../models/school.dart';
 
 /// All Cloud Firestore reads/writes for EduMate Pro, isolated from the UI.
 /// Streams power the live lists; one-shot futures power mutations.
+///
+/// **Multi-school:** every school owns its data in subcollections of
+/// `schools/{schoolId}`, so schools are fully isolated. [activeSchoolId] is
+/// the school the signed-in user is currently working in (set by
+/// `AuthController`, switched from the app bar); all school-scoped helpers
+/// go through [_col], so a user only ever reads the school they are in.
+/// Users, schools and staff invites are global.
 class FirestoreService {
   FirestoreService([FirebaseFirestore? db])
       : _db = db ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _db;
+
+  /// Sentinel used before a school is chosen — reads resolve to an empty,
+  /// non-existent school rather than crashing or leaking data.
+  static const _noSchool = '__none__';
+
+  String? activeSchoolId;
+
+  DocumentReference<Map<String, dynamic>> get _schoolDoc =>
+      _db.collection(Collections.schools).doc(activeSchoolId ?? _noSchool);
+
+  /// A collection inside the active school.
+  CollectionReference<Map<String, dynamic>> _col(String name) =>
+      _schoolDoc.collection(name);
+
+  // ---- Schools -------------------------------------------------------------
+
+  /// Every school on the platform — the Super Admin console, and the list a
+  /// parent picks from when joining a school.
+  Stream<List<School>> watchSchools() =>
+      _db.collection(Collections.schools).snapshots().map(
+            (s) => s.docs.map(School.fromDoc).toList()
+              ..sort((a, b) => a.name.compareTo(b.name)),
+          );
+
+  Future<School?> getSchool(String id) async {
+    final doc = await _db.collection(Collections.schools).doc(id).get();
+    return doc.exists ? School.fromDoc(doc) : null;
+  }
+
+  /// Super Admin sets a new school up; returns its id.
+  Future<String> createSchool(School school) async {
+    final ref =
+        await _db.collection(Collections.schools).add(school.toMap());
+    return ref.id;
+  }
+
+  Future<void> updateSchool(String id, Map<String, dynamic> data) =>
+      _db.collection(Collections.schools).doc(id).update(data);
+
+  // ---- School membership ---------------------------------------------------
+
+  CollectionReference<Map<String, dynamic>> _members(String schoolId) => _db
+      .collection(Collections.schools)
+      .doc(schoolId)
+      .collection(Collections.members);
+
+  /// **All** schools this person belongs to, with their role at each. One
+  /// collection-group query, so an admin, principal or teacher assigned to
+  /// several schools sees every one of them and can switch between them.
+  Stream<List<SchoolMembership>> watchMembershipsForUser(String uid) => _db
+      .collectionGroup(Collections.members)
+      .where('uid', isEqualTo: uid)
+      .snapshots()
+      .map((s) => s.docs.map(SchoolMembership.fromDoc).toList()
+        ..sort((a, b) => a.schoolName.compareTo(b.schoolName)));
+
+  Future<List<SchoolMembership>> getMembershipsForUser(String uid) async {
+    final snap = await _db
+        .collectionGroup(Collections.members)
+        .where('uid', isEqualTo: uid)
+        .get();
+    return snap.docs.map(SchoolMembership.fromDoc).toList()
+      ..sort((a, b) => a.schoolName.compareTo(b.schoolName));
+  }
+
+  /// Everybody at the **active** school (staff and parents).
+  Stream<List<SchoolMembership>> watchSchoolMembers({List<UserRole>? roles}) =>
+      watchMembers(activeSchoolId ?? _noSchool, roles: roles);
+
+  /// The people at a school, optionally filtered by role.
+  Stream<List<SchoolMembership>> watchMembers(String schoolId,
+          {List<UserRole>? roles}) =>
+      _members(schoolId).snapshots().map((s) => s.docs
+          .map(SchoolMembership.fromDoc)
+          .where((m) => roles == null || roles.contains(m.role))
+          .toList()
+        ..sort((a, b) => a.fullName.compareTo(b.fullName)));
+
+  /// Adds (or updates) somebody's membership of a school.
+  Future<void> setMembership(SchoolMembership member) =>
+      _members(member.schoolId)
+          .doc(member.uid)
+          .set(member.toMap(), SetOptions(merge: true));
+
+  Future<void> setMemberActive(String schoolId, String uid, bool active) =>
+      _members(schoolId).doc(uid).update({'active': active});
+
+  Future<void> removeMembership(String schoolId, String uid) =>
+      _members(schoolId).doc(uid).delete();
 
   // ---- Users ---------------------------------------------------------------
 
@@ -36,46 +133,62 @@ class FirestoreService {
   Future<void> updateUser(String uid, Map<String, dynamic> data) =>
       _db.collection(Collections.users).doc(uid).update(data);
 
-  Stream<List<AppUser>> watchUsersByRole(UserRole role) => _db
-      .collection(Collections.users)
-      .where('role', isEqualTo: role.name)
-      .snapshots()
-      .map((s) => s.docs.map(AppUser.fromDoc).toList()
-        ..sort((a, b) => a.fullName.compareTo(b.fullName)));
-
-  /// Staff directory (admins + teachers) for the staff chat picker.
-  Stream<List<AppUser>> watchStaff() => _db
-      .collection(Collections.users)
-      .where('role', whereIn: [UserRole.admin.name, UserRole.teacher.name])
-      .snapshots()
-      .map((s) => s.docs.map(AppUser.fromDoc).toList()
-        ..sort((a, b) => a.fullName.compareTo(b.fullName)));
-
-  // ---- Staff invites -------------------------------------------------------
-
-  /// Admin pre-provisions a staff account against a phone number. The doc id
-  /// is the E.164 number so first sign-in can look it up directly.
-  Future<void> createStaffInvite(StaffInvite invite) => _db
-      .collection(Collections.staffInvites)
-      .doc(invite.phone)
-      .set(invite.toMap());
-
-  Future<StaffInvite?> getStaffInvite(String phoneE164) async {
-    final doc =
-        await _db.collection(Collections.staffInvites).doc(phoneE164).get();
-    return doc.exists ? StaffInvite.fromDoc(doc) : null;
+  /// Looks a person up by phone number so a Super Admin / school admin can
+  /// assign somebody who already has an account.
+  Future<AppUser?> findUserByPhone(String phoneE164) async {
+    final snap = await _db
+        .collection(Collections.users)
+        .where('phone', isEqualTo: phoneE164)
+        .limit(1)
+        .get();
+    return snap.docs.isEmpty ? null : AppUser.fromDoc(snap.docs.first);
   }
 
-  Future<void> markInviteClaimed(String phoneE164, String uid) => _db
+  /// The active school's directory, filtered by role — drives the chat
+  /// pickers, broadcast recipients and parent linking.
+  Stream<List<AppUser>> watchUsersByRole(UserRole role) =>
+      watchMembers(activeSchoolId ?? _noSchool, roles: [role])
+          .map((ms) => ms.map((m) => m.toAppUser()).toList());
+
+  /// Staff directory (admins, principals + teachers) for the staff chat
+  /// picker, scoped to the active school.
+  Stream<List<AppUser>> watchStaff() => watchMembers(
+        activeSchoolId ?? _noSchool,
+        roles: const [UserRole.admin, UserRole.principal, UserRole.teacher],
+      ).map((ms) => ms.map((m) => m.toAppUser()).toList());
+
+  // ---- Staff invites -------------------------------------------------------
+  // Global collection keyed by phone number **and school**, so one person
+  // can be invited to several schools and picks up every membership on
+  // their next sign-in.
+
+  Future<void> createStaffInvite(StaffInvite invite) =>
+      _db.collection(Collections.staffInvites).add(invite.toMap());
+
+  /// Unclaimed invites for a phone number, across all schools.
+  Future<List<StaffInvite>> getStaffInvitesForPhone(String phoneE164) async {
+    final snap = await _db
+        .collection(Collections.staffInvites)
+        .where('phone', isEqualTo: phoneE164)
+        .get();
+    return snap.docs
+        .map(StaffInvite.fromDoc)
+        .where((i) => !i.claimed)
+        .toList();
+  }
+
+  Future<void> markInviteClaimed(String inviteId, String uid) => _db
       .collection(Collections.staffInvites)
-      .doc(phoneE164)
+      .doc(inviteId)
       .update({'claimedByUid': uid});
 
-  Future<void> deleteStaffInvite(String phoneE164) =>
-      _db.collection(Collections.staffInvites).doc(phoneE164).delete();
+  Future<void> deleteStaffInvite(String inviteId) =>
+      _db.collection(Collections.staffInvites).doc(inviteId).delete();
 
-  Stream<List<StaffInvite>> watchStaffInvites() => _db
+  /// Pending invites for one school (admin's Staff screen).
+  Stream<List<StaffInvite>> watchStaffInvites(String schoolId) => _db
       .collection(Collections.staffInvites)
+      .where('schoolId', isEqualTo: schoolId)
       .snapshots()
       .map((s) => s.docs.map(StaffInvite.fromDoc).toList()
         ..sort((a, b) => (b.createdAt ?? DateTime(0))
@@ -84,65 +197,62 @@ class FirestoreService {
   // ---- Classes -------------------------------------------------------------
 
   Stream<List<SchoolClass>> watchClasses() =>
-      _db.collection(Collections.classes).snapshots().map(
+      _col(Collections.classes).snapshots().map(
             (s) => s.docs.map(SchoolClass.fromDoc).toList()
               ..sort((a, b) => a.name.compareTo(b.name)),
           );
 
-  Stream<List<SchoolClass>> watchClassesForTeacher(String teacherUid) => _db
-      .collection(Collections.classes)
+  Stream<List<SchoolClass>> watchClassesForTeacher(String teacherUid) => _col(Collections.classes)
       .where('teacherUid', isEqualTo: teacherUid)
       .snapshots()
       .map((s) => s.docs.map(SchoolClass.fromDoc).toList()
         ..sort((a, b) => a.name.compareTo(b.name)));
 
   Future<void> createClass(SchoolClass c) =>
-      _db.collection(Collections.classes).add(c.toMap()).then((_) {});
+      _col(Collections.classes).add(c.toMap()).then((_) {});
 
   Future<void> updateClass(String id, Map<String, dynamic> data) =>
-      _db.collection(Collections.classes).doc(id).update(data);
+      _col(Collections.classes).doc(id).update(data);
 
   Future<void> deleteClass(String id) =>
-      _db.collection(Collections.classes).doc(id).delete();
+      _col(Collections.classes).doc(id).delete();
 
   // ---- Learners ------------------------------------------------------------
 
   Stream<List<Learner>> watchLearners() =>
-      _db.collection(Collections.learners).snapshots().map(
+      _col(Collections.learners).snapshots().map(
             (s) => s.docs.map(Learner.fromDoc).toList()
               ..sort((a, b) => a.fullName.compareTo(b.fullName)),
           );
 
-  Stream<List<Learner>> watchLearnersInClass(String classId) => _db
-      .collection(Collections.learners)
+  Stream<List<Learner>> watchLearnersInClass(String classId) => _col(Collections.learners)
       .where('classId', isEqualTo: classId)
       .snapshots()
       .map((s) => s.docs.map(Learner.fromDoc).toList()
         ..sort((a, b) => a.fullName.compareTo(b.fullName)));
 
   /// The children linked to a parent account — drives the parent dashboard.
-  Stream<List<Learner>> watchLearnersForParent(String parentUid) => _db
-      .collection(Collections.learners)
+  Stream<List<Learner>> watchLearnersForParent(String parentUid) => _col(Collections.learners)
       .where('parentUids', arrayContains: parentUid)
       .snapshots()
       .map((s) => s.docs.map(Learner.fromDoc).toList()
         ..sort((a, b) => a.fullName.compareTo(b.fullName)));
 
   Future<Learner?> getLearner(String id) async {
-    final doc = await _db.collection(Collections.learners).doc(id).get();
+    final doc = await _col(Collections.learners).doc(id).get();
     return doc.exists ? Learner.fromDoc(doc) : null;
   }
 
   Future<String> createLearner(Learner l) async {
-    final ref = await _db.collection(Collections.learners).add(l.toMap());
+    final ref = await _col(Collections.learners).add(l.toMap());
     return ref.id;
   }
 
   Future<void> updateLearner(String id, Map<String, dynamic> data) =>
-      _db.collection(Collections.learners).doc(id).update(data);
+      _col(Collections.learners).doc(id).update(data);
 
   Future<void> deleteLearner(String id) =>
-      _db.collection(Collections.learners).doc(id).delete();
+      _col(Collections.learners).doc(id).delete();
 
   /// Assign (or unassign, with null) a learner to a class. Stores the class
   /// name too so lists render without a join.
@@ -169,9 +279,9 @@ class FirestoreService {
     AttendanceType type, {
     required AppUser by,
   }) {
-    final eventRef = _db.collection(Collections.attendance).doc();
+    final eventRef = _col(Collections.attendance).doc();
     final learnerRef =
-        _db.collection(Collections.learners).doc(learner.id);
+        _col(Collections.learners).doc(learner.id);
     final record = AttendanceRecord(
       id: eventRef.id,
       learnerId: learner.id,
@@ -196,19 +306,162 @@ class FirestoreService {
   /// staff see all).
   Stream<List<AttendanceRecord>> watchAttendanceForLearner(String learnerId,
           {int limit = 20}) =>
-      _db
-          .collection(Collections.attendance)
+      _col(Collections.attendance)
           .where('learnerId', isEqualTo: learnerId)
           .orderBy('at', descending: true)
           .limit(limit)
           .snapshots()
           .map((s) => s.docs.map(AttendanceRecord.fromDoc).toList());
 
+  // ---- Subjects ------------------------------------------------------------
+
+  Stream<List<Subject>> watchSubjects() =>
+      _col(Collections.subjects).snapshots().map(
+            (s) => s.docs.map(Subject.fromDoc).toList()
+              ..sort((a, b) => a.name.compareTo(b.name)),
+          );
+
+  Stream<List<Subject>> watchSubjectsForClass(String classId) => _col(
+          Collections.subjects)
+      .where('classId', isEqualTo: classId)
+      .snapshots()
+      .map((s) => s.docs.map(Subject.fromDoc).toList()
+        ..sort((a, b) => a.name.compareTo(b.name)));
+
+  /// The subjects a teacher teaches — their capture list.
+  Stream<List<Subject>> watchSubjectsForTeacher(String teacherUid) => _col(
+          Collections.subjects)
+      .where('teacherUid', isEqualTo: teacherUid)
+      .snapshots()
+      .map((s) => s.docs.map(Subject.fromDoc).toList()
+        ..sort((a, b) => a.name.compareTo(b.name)));
+
+  Future<void> createSubject(Subject s) =>
+      _col(Collections.subjects).add(s.toMap()).then((_) {});
+
+  Future<void> updateSubject(String id, Map<String, dynamic> data) =>
+      _col(Collections.subjects).doc(id).update(data);
+
+  Future<void> deleteSubject(String id) =>
+      _col(Collections.subjects).doc(id).delete();
+
+  // ---- Assessments & marks -------------------------------------------------
+
+  Stream<List<Assessment>> watchAssessmentsForSubject(String subjectId) =>
+      _col(Collections.assessments)
+          .where('subjectId', isEqualTo: subjectId)
+          .snapshots()
+          .map((s) => s.docs.map(Assessment.fromDoc).toList()
+            ..sort((a, b) => (b.date ?? DateTime(0))
+                .compareTo(a.date ?? DateTime(0))));
+
+  Future<String> createAssessment(Assessment a) async {
+    final ref = await _col(Collections.assessments).add(a.toMap());
+    return ref.id;
+  }
+
+  Future<void> deleteAssessment(String id) =>
+      _col(Collections.assessments).doc(id).delete();
+
+  Stream<List<Mark>> watchMarksForAssessment(String assessmentId) =>
+      _col(Collections.marks)
+          .where('assessmentId', isEqualTo: assessmentId)
+          .snapshots()
+          .map((s) => s.docs.map(Mark.fromDoc).toList()
+            ..sort((a, b) => a.learnerName.compareTo(b.learnerName)));
+
+  /// Every mark for one learner — the progress report and the parent's
+  /// child-progress dashboard.
+  Stream<List<Mark>> watchMarksForLearner(String learnerId) =>
+      _col(Collections.marks)
+          .where('learnerId', isEqualTo: learnerId)
+          .snapshots()
+          .map((s) => s.docs.map(Mark.fromDoc).toList()
+            ..sort((a, b) => (b.date ?? DateTime(0))
+                .compareTo(a.date ?? DateTime(0))));
+
+  Stream<List<Mark>> watchMarksForClass(String classId) =>
+      _col(Collections.marks)
+          .where('classId', isEqualTo: classId)
+          .snapshots()
+          .map((s) => s.docs.map(Mark.fromDoc).toList());
+
+  /// Saves a whole mark sheet in one batch — one document per learner,
+  /// keyed `{assessmentId}_{learnerId}` so re-capturing overwrites cleanly.
+  Future<void> saveMarks(List<Mark> marks) async {
+    final batch = _db.batch();
+    for (final m in marks) {
+      final ref = _col(Collections.marks)
+          .doc('${m.assessmentId}_${m.learnerId}');
+      batch.set(ref, m.toMap(), SetOptions(merge: true));
+    }
+    await batch.commit();
+  }
+
+  /// Groups a learner's marks by subject for progress reporting.
+  static List<SubjectProgress> progressBySubject(List<Mark> marks) {
+    final bySubject = <String, List<Mark>>{};
+    for (final m in marks) {
+      bySubject.putIfAbsent(m.subjectId, () => []).add(m);
+    }
+    final out = bySubject.entries
+        .map((e) => SubjectProgress(
+              subjectId: e.key,
+              subjectName: e.value.first.subjectName,
+              marks: e.value,
+            ))
+        .toList()
+      ..sort((a, b) => a.subjectName.compareTo(b.subjectName));
+    return out;
+  }
+
+  // ---- Lesson plans & homework ---------------------------------------------
+
+  Stream<List<LessonPlan>> watchLessonPlansForClass(String classId) =>
+      _col(Collections.lessonPlans)
+          .where('classId', isEqualTo: classId)
+          .snapshots()
+          .map((s) => s.docs.map(LessonPlan.fromDoc).toList()
+            ..sort((a, b) => b.date.compareTo(a.date)));
+
+  Stream<List<LessonPlan>> watchLessonPlansForTeacher(String teacherUid) =>
+      _col(Collections.lessonPlans)
+          .where('teacherUid', isEqualTo: teacherUid)
+          .snapshots()
+          .map((s) => s.docs.map(LessonPlan.fromDoc).toList()
+            ..sort((a, b) => b.date.compareTo(a.date)));
+
+  Future<void> createLessonPlan(LessonPlan p) =>
+      _col(Collections.lessonPlans).add(p.toMap()).then((_) {});
+
+  Future<void> deleteLessonPlan(String id) =>
+      _col(Collections.lessonPlans).doc(id).delete();
+
+  Stream<List<Homework>> watchHomeworkForClass(String classId) =>
+      _col(Collections.homework)
+          .where('classId', isEqualTo: classId)
+          .snapshots()
+          .map((s) => s.docs.map(Homework.fromDoc).toList()
+            ..sort((a, b) => b.dueDate.compareTo(a.dueDate)));
+
+  Stream<List<Homework>> watchHomeworkForTeacher(String teacherUid) =>
+      _col(Collections.homework)
+          .where('teacherUid', isEqualTo: teacherUid)
+          .snapshots()
+          .map((s) => s.docs.map(Homework.fromDoc).toList()
+            ..sort((a, b) => b.dueDate.compareTo(a.dueDate)));
+
+  Future<void> createHomework(Homework h) =>
+      _col(Collections.homework).add(h.toMap()).then((_) {});
+
+  Future<void> deleteHomework(String id) =>
+      _col(Collections.homework).doc(id).delete();
+
   // ---- Enrollment applications --------------------------------------------
 
   Future<String> createApplication(EnrollmentApplication app) async {
     final ref =
-        await _db.collection(Collections.applications).add(app.toMap());
+        await _col(Collections.applications).add(app.toMap());
     return ref.id;
   }
 
@@ -216,7 +469,7 @@ class FirestoreService {
   /// every step, so partial data is expected).
   Future<String> createDraftApplication(
       String parentUid, Map<String, dynamic> data) async {
-    final ref = await _db.collection(Collections.applications).add({
+    final ref = await _col(Collections.applications).add({
       ...data,
       'parentUid': parentUid,
       'status': ApplicationStatus.draft.name,
@@ -227,21 +480,18 @@ class FirestoreService {
     return ref.id;
   }
 
-  Future<void> updateApplication(String id, Map<String, dynamic> data) => _db
-      .collection(Collections.applications)
+  Future<void> updateApplication(String id, Map<String, dynamic> data) => _col(Collections.applications)
       .doc(id)
       .update({...data, 'updatedAt': FieldValue.serverTimestamp()});
 
-  Stream<EnrollmentApplication?> watchApplication(String id) => _db
-      .collection(Collections.applications)
+  Stream<EnrollmentApplication?> watchApplication(String id) => _col(Collections.applications)
       .doc(id)
       .snapshots()
       .map((d) => d.exists ? EnrollmentApplication.fromDoc(d) : null);
 
   Stream<List<EnrollmentApplication>> watchApplicationsForParent(
           String parentUid) =>
-      _db
-          .collection(Collections.applications)
+      _col(Collections.applications)
           .where('parentUid', isEqualTo: parentUid)
           .snapshots()
           .map((s) => s.docs.map(EnrollmentApplication.fromDoc).toList()
@@ -249,8 +499,7 @@ class FirestoreService {
                 .compareTo(a.createdAt ?? DateTime(0))));
 
   /// All applications for the admin review queue (client-side filtered).
-  Stream<List<EnrollmentApplication>> watchApplications() => _db
-      .collection(Collections.applications)
+  Stream<List<EnrollmentApplication>> watchApplications() => _col(Collections.applications)
       .snapshots()
       .map((s) => s.docs.map(EnrollmentApplication.fromDoc).toList()
         ..sort((a, b) => (b.createdAt ?? DateTime(0))
@@ -278,8 +527,8 @@ class FirestoreService {
   /// applying parent, and marks the application enrolled — atomically.
   Future<String> enrollApplication(EnrollmentApplication app,
       {String byName = ''}) async {
-    final learnerRef = _db.collection(Collections.learners).doc();
-    final appRef = _db.collection(Collections.applications).doc(app.id);
+    final learnerRef = _col(Collections.learners).doc();
+    final appRef = _col(Collections.applications).doc(app.id);
     final event = ApplicationEvent(
         status: ApplicationStatus.enrolled,
         note: 'Learner record created',
@@ -313,18 +562,16 @@ class FirestoreService {
   // ---- Payments ------------------------------------------------------------
 
   Future<void> createPayment(PaymentRecord p) =>
-      _db.collection(Collections.payments).add(p.toMap()).then((_) {});
+      _col(Collections.payments).add(p.toMap()).then((_) {});
 
-  Stream<List<PaymentRecord>> watchPaymentsForParent(String parentUid) => _db
-      .collection(Collections.payments)
+  Stream<List<PaymentRecord>> watchPaymentsForParent(String parentUid) => _col(Collections.payments)
       .where('parentUid', isEqualTo: parentUid)
       .snapshots()
       .map((s) => s.docs.map(PaymentRecord.fromDoc).toList()
         ..sort((a, b) => (b.createdAt ?? DateTime(0))
             .compareTo(a.createdAt ?? DateTime(0))));
 
-  Stream<List<PaymentRecord>> watchPayments() => _db
-      .collection(Collections.payments)
+  Stream<List<PaymentRecord>> watchPayments() => _col(Collections.payments)
       .snapshots()
       .map((s) => s.docs.map(PaymentRecord.fromDoc).toList()
         ..sort((a, b) => (b.createdAt ?? DateTime(0))
@@ -338,7 +585,7 @@ class FirestoreService {
     String note = '',
     String byName = '',
   }) =>
-      _db.collection(Collections.payments).doc(paymentId).update({
+      _col(Collections.payments).doc(paymentId).update({
         'status': status.name,
         'reviewNote': note,
         'reviewedByName': byName,
@@ -347,8 +594,7 @@ class FirestoreService {
 
   // ---- Chat ----------------------------------------------------------------
 
-  Stream<List<ChatThread>> watchChatsForUser(String uid) => _db
-      .collection(Collections.chats)
+  Stream<List<ChatThread>> watchChatsForUser(String uid) => _col(Collections.chats)
       .where('participantUids', arrayContains: uid)
       .snapshots()
       .map((s) => s.docs.map(ChatThread.fromDoc).toList()
@@ -356,8 +602,7 @@ class FirestoreService {
             .compareTo(a.updatedAt ?? DateTime(0))));
 
   /// Parent→teacher chat requests awaiting admin approval.
-  Stream<List<ChatThread>> watchPendingChatRequests() => _db
-      .collection(Collections.chats)
+  Stream<List<ChatThread>> watchPendingChatRequests() => _col(Collections.chats)
       .where('approval', isEqualTo: ChatApproval.requested.name)
       .snapshots()
       .map((s) => s.docs.map(ChatThread.fromDoc).toList()
@@ -366,8 +611,7 @@ class FirestoreService {
 
   /// Opens (or reuses) a staff chat between two staff members.
   Future<String> openStaffChat(AppUser me, AppUser other) async {
-    final existing = await _db
-        .collection(Collections.chats)
+    final existing = await _col(Collections.chats)
         .where('participantUids', arrayContains: me.uid)
         .where('type', isEqualTo: ChatType.staff.name)
         .get();
@@ -382,7 +626,7 @@ class FirestoreService {
       participantNames: {me.uid: me.fullName, other.uid: other.fullName},
       approval: ChatApproval.approved,
     );
-    final ref = await _db.collection(Collections.chats).add(thread.toMap());
+    final ref = await _col(Collections.chats).add(thread.toMap());
     return ref.id;
   }
 
@@ -394,8 +638,7 @@ class FirestoreService {
     String reason = '',
     String learnerName = '',
   }) async {
-    final existing = await _db
-        .collection(Collections.chats)
+    final existing = await _col(Collections.chats)
         .where('participantUids', arrayContains: parent.uid)
         .where('type', isEqualTo: ChatType.parentTeacher.name)
         .get();
@@ -418,24 +661,22 @@ class FirestoreService {
       requestReason: reason,
       learnerName: learnerName,
     );
-    final ref = await _db.collection(Collections.chats).add(thread.toMap());
+    final ref = await _col(Collections.chats).add(thread.toMap());
     return ref.id;
   }
 
   Future<void> setChatApproval(String chatId, ChatApproval approval) =>
-      _db.collection(Collections.chats).doc(chatId).update({
+      _col(Collections.chats).doc(chatId).update({
         'approval': approval.name,
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-  Stream<ChatThread?> watchChat(String chatId) => _db
-      .collection(Collections.chats)
+  Stream<ChatThread?> watchChat(String chatId) => _col(Collections.chats)
       .doc(chatId)
       .snapshots()
       .map((d) => d.exists ? ChatThread.fromDoc(d) : null);
 
-  Stream<List<ChatMessage>> watchMessages(String chatId) => _db
-      .collection(Collections.chats)
+  Stream<List<ChatMessage>> watchMessages(String chatId) => _col(Collections.chats)
       .doc(chatId)
       .collection('messages')
       .orderBy('createdAt')
@@ -443,7 +684,7 @@ class FirestoreService {
       .map((s) => s.docs.map(ChatMessage.fromDoc).toList());
 
   Future<void> sendMessage(String chatId, ChatMessage msg) async {
-    final chatRef = _db.collection(Collections.chats).doc(chatId);
+    final chatRef = _col(Collections.chats).doc(chatId);
     await chatRef.collection('messages').add(msg.toMap());
     await chatRef.update({
       'lastMessage': msg.text,
@@ -460,14 +701,13 @@ class FirestoreService {
   Future<MailSettings?> getMailSettings({bool refresh = false}) async {
     if (!refresh && _cachedMailSettings != null) return _cachedMailSettings;
     final doc =
-        await _db.collection(Collections.settings).doc('smtp').get();
+        await _col(Collections.settings).doc('smtp').get();
     _cachedMailSettings = doc.exists ? MailSettings.fromDoc(doc) : null;
     return _cachedMailSettings;
   }
 
   Future<void> setMailSettings(MailSettings settings) async {
-    await _db
-        .collection(Collections.settings)
+    await _col(Collections.settings)
         .doc('smtp')
         .set(settings.toMap(), SetOptions(merge: true));
     _cachedMailSettings = settings;
@@ -482,7 +722,7 @@ class FirestoreService {
     required String status,
     String error = '',
   }) =>
-      _db.collection(Collections.mailQueue).add({
+      _col(Collections.mailQueue).add({
         'to': to,
         'subject': subject,
         'text': text,
@@ -495,8 +735,7 @@ class FirestoreService {
   /// Outbox messages still to be sent (queued from web / before SMTP was
   /// configured / failed attempts).
   Future<List<QueuedMail>> getUnsentMail({int limit = 25}) async {
-    final snap = await _db
-        .collection(Collections.mailQueue)
+    final snap = await _col(Collections.mailQueue)
         .where('status', whereIn: ['pending', 'error'])
         .limit(limit)
         .get();
@@ -504,15 +743,14 @@ class FirestoreService {
   }
 
   Future<void> markMail(String id, String status, {String error = ''}) =>
-      _db.collection(Collections.mailQueue).doc(id).update({
+      _col(Collections.mailQueue).doc(id).update({
         'status': status,
         'error': error,
         if (status == 'sent') 'sentAt': FieldValue.serverTimestamp(),
       });
 
   /// Live count of unsent outbox messages, for the Email settings screen.
-  Stream<int> watchOutboxCount() => _db
-      .collection(Collections.mailQueue)
+  Stream<int> watchOutboxCount() => _col(Collections.mailQueue)
       .where('status', whereIn: ['pending', 'error'])
       .snapshots()
       .map((s) => s.docs.length);
@@ -520,16 +758,15 @@ class FirestoreService {
   // ---- Broadcast messages --------------------------------------------------
 
   Future<String> createBroadcast(Broadcast b) async {
-    final ref = await _db.collection(Collections.broadcasts).add(b.toMap());
+    final ref = await _col(Collections.broadcasts).add(b.toMap());
     return ref.id;
   }
 
   Future<void> updateBroadcast(String id, Map<String, dynamic> data) =>
-      _db.collection(Collections.broadcasts).doc(id).update(data);
+      _col(Collections.broadcasts).doc(id).update(data);
 
   /// All broadcasts, newest first (admin history).
-  Stream<List<Broadcast>> watchBroadcasts() => _db
-      .collection(Collections.broadcasts)
+  Stream<List<Broadcast>> watchBroadcasts() => _col(Collections.broadcasts)
       .orderBy('createdAt', descending: true)
       .limit(100)
       .snapshots()
@@ -539,8 +776,7 @@ class FirestoreService {
   /// + the notification bell).
   Stream<List<Broadcast>> watchBroadcastsForUser(String uid,
           {int limit = 50}) =>
-      _db
-          .collection(Collections.broadcasts)
+      _col(Collections.broadcasts)
           .where('recipientUids', arrayContains: uid)
           .orderBy('createdAt', descending: true)
           .limit(limit)
@@ -553,34 +789,33 @@ class FirestoreService {
 
   // ---- Calendar events -----------------------------------------------------
 
-  Stream<List<CalendarEvent>> watchEvents() => _db
-      .collection(Collections.events)
+  Stream<List<CalendarEvent>> watchEvents() => _col(Collections.events)
       .orderBy('start')
       .snapshots()
       .map((s) => s.docs.map(CalendarEvent.fromDoc).toList());
 
   Future<void> createEvent(CalendarEvent e) =>
-      _db.collection(Collections.events).add(e.toMap()).then((_) {});
+      _col(Collections.events).add(e.toMap()).then((_) {});
 
   Future<void> deleteEvent(String id) =>
-      _db.collection(Collections.events).doc(id).delete();
+      _col(Collections.events).doc(id).delete();
 
   // ---- Fees ----------------------------------------------------------------
 
   Stream<List<FeeStructure>> watchFeeStructures() =>
-      _db.collection(Collections.feeStructures).snapshots().map(
+      _col(Collections.feeStructures).snapshots().map(
             (s) => s.docs.map(FeeStructure.fromDoc).toList()
               ..sort((a, b) => a.name.compareTo(b.name)),
           );
 
   Future<void> createFeeStructure(FeeStructure f) =>
-      _db.collection(Collections.feeStructures).add(f.toMap()).then((_) {});
+      _col(Collections.feeStructures).add(f.toMap()).then((_) {});
 
   Future<void> updateFeeStructure(String id, Map<String, dynamic> data) =>
-      _db.collection(Collections.feeStructures).doc(id).update(data);
+      _col(Collections.feeStructures).doc(id).update(data);
 
   Future<void> deleteFeeStructure(String id) =>
-      _db.collection(Collections.feeStructures).doc(id).delete();
+      _col(Collections.feeStructures).doc(id).delete();
 
   /// Admin records a fee payment at the office — created pre-approved.
   Future<void> recordAdminPayment(PaymentRecord p) => createPayment(p);
@@ -589,19 +824,18 @@ class FirestoreService {
 
   Future<String> createPaymentImport(PaymentImport imp) async {
     final ref =
-        await _db.collection(Collections.paymentImports).add(imp.toMap());
+        await _col(Collections.paymentImports).add(imp.toMap());
     return ref.id;
   }
 
-  Stream<List<PaymentImport>> watchPaymentImports() => _db
-      .collection(Collections.paymentImports)
+  Stream<List<PaymentImport>> watchPaymentImports() => _col(Collections.paymentImports)
       .orderBy('createdAt', descending: true)
       .limit(50)
       .snapshots()
       .map((s) => s.docs.map(PaymentImport.fromDoc).toList());
 
   Future<void> discardPaymentImport(String id) =>
-      _db.collection(Collections.paymentImports).doc(id).update({
+      _col(Collections.paymentImports).doc(id).update({
         'status': ImportStatus.discarded.name,
         'resolvedAt': FieldValue.serverTimestamp(),
       });
@@ -621,7 +855,7 @@ class FirestoreService {
       final batch = _db.batch();
       for (final row in valid.skip(i).take(400)) {
         final learner = learnersById[row.learnerId];
-        final ref = _db.collection(Collections.payments).doc();
+        final ref = _col(Collections.payments).doc();
         batch.set(
             ref,
             PaymentRecord(
@@ -644,7 +878,7 @@ class FirestoreService {
       }
       await batch.commit();
     }
-    await _db.collection(Collections.paymentImports).doc(imp.id).update({
+    await _col(Collections.paymentImports).doc(imp.id).update({
       'status': ImportStatus.approved.name,
       'resolvedAt': FieldValue.serverTimestamp(),
     });

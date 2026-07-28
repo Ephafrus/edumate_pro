@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 
 import '../../core/responsive.dart';
 import '../../models/enums.dart';
-import '../../router/app_router.dart';
 import '../../state/auth_controller.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/common.dart';
@@ -58,7 +57,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!mounted) return;
     if (ok) {
       showSnack(context, 'Profile saved');
-      if (firstTime) context.go(homeFor(auth.role, false));
+      if (firstTime) context.go(auth.homePath);
     } else {
       showSnack(context, auth.error ?? 'Could not save profile');
     }

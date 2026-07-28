@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/responsive.dart';
+import '../../models/academics.dart';
 import '../../models/school.dart';
 import '../../router/app_router.dart';
 import '../../services/firestore_service.dart';
@@ -50,6 +51,39 @@ class TeacherHomeScreen extends StatelessWidget {
               onTap: () => context.go(Routes.chats),
             ),
             const SizedBox(height: 20),
+            SectionCard(
+              title: 'My subjects',
+              child: StreamBuilder<List<Subject>>(
+                stream: db.watchSubjectsForTeacher(user.uid),
+                builder: (context, snap) {
+                  if (!snap.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final subjects = snap.data!;
+                  if (subjects.isEmpty) {
+                    return const EmptyState(
+                        'No subjects assigned to you yet — the school admin '
+                        'adds subjects to a class and assigns the teacher.',
+                        icon: Icons.menu_book_outlined);
+                  }
+                  return Column(
+                    children: subjects
+                        .map((s) => ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading:
+                                  const Icon(Icons.menu_book_outlined),
+                              title: Text(s.name),
+                              subtitle: Text(s.className),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () =>
+                                  context.go(Routes.teacherSubject(s.id)),
+                            ))
+                        .toList(),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
             SectionCard(
               title: 'My classes',
               child: StreamBuilder<List<SchoolClass>>(

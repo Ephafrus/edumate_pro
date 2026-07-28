@@ -1,10 +1,16 @@
 // Shared enums for the EduMate Pro domain. Each has a `fromString` that
 // tolerates unknown/legacy values so old Firestore records never crash the app.
 
-/// The three platform roles. Everyone signs in with the same phone-OTP flow;
-/// the role on `users/{uid}` decides navigation and permissions.
+/// The roles a user can hold **at a school**. Everyone signs in with the same
+/// phone-OTP flow; the role comes from their membership of the school they
+/// are currently working in (`schools/{schoolId}/members/{uid}`), so the same
+/// person can be, say, a teacher at one school and a principal at another.
+///
+/// Platform-level Super Admin is not a school role — it is the
+/// `superAdmin` flag on `users/{uid}`.
 enum UserRole {
   admin,
+  principal,
   teacher,
   parent;
 
@@ -12,6 +18,8 @@ enum UserRole {
     switch (s) {
       case 'admin':
         return UserRole.admin;
+      case 'principal':
+        return UserRole.principal;
       case 'teacher':
         return UserRole.teacher;
       default:
@@ -23,12 +31,23 @@ enum UserRole {
     switch (this) {
       case UserRole.admin:
         return 'School admin';
+      case UserRole.principal:
+        return 'Principal';
       case UserRole.teacher:
         return 'Teacher';
       case UserRole.parent:
         return 'Parent';
     }
   }
+
+  /// Principals run the school alongside the office admin, so both hold the
+  /// same management rights within their school.
+  bool get isManager => this == UserRole.admin || this == UserRole.principal;
+
+  bool get isStaff => isManager || this == UserRole.teacher;
+
+  /// Roles a Super Admin can assign when setting a school up.
+  static const assignable = [UserRole.admin, UserRole.principal];
 }
 
 /// Lifecycle of an enrollment application (applications/{id}).

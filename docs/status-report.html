@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EduMate Pro — Project Status Report</title>
+<style>
+  :root {
+    --bg: #f6f7fb;
+    --surface: #ffffff;
+    --ink: #1a1c25;
+    --muted: #5d6275;
+    --line: #e3e5ef;
+    --primary: #3f51b5;
+    --tertiary: #7b4397;
+    --green: #1b9c85;
+    --amber: #f9a825;
+    --red: #d32f2f;
+    --blue: #1c6dd0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12131a;
+      --surface: #1b1d27;
+      --ink: #eceefb;
+      --muted: #a2a7bd;
+      --line: #2c2f3d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 24px 20px 64px; }
+  header.hero {
+    background: linear-gradient(135deg, var(--primary), var(--tertiary));
+    color: #fff;
+    border-radius: 24px;
+    padding: 36px;
+    margin-bottom: 28px;
+  }
+  header.hero h1 { margin: 0 0 6px; font-size: 32px; font-weight: 800; }
+  header.hero p { margin: 0; opacity: .9; max-width: 62ch; }
+  .meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+  .meta span {
+    background: rgba(255,255,255,.18);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  h2 {
+    font-size: 22px; font-weight: 800;
+    margin: 36px 0 12px; padding-bottom: 8px;
+    border-bottom: 2px solid var(--line);
+  }
+  h3 { font-size: 17px; margin: 22px 0 8px; }
+  .cards { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 18px;
+  }
+  .card .n { font-size: 30px; font-weight: 800; color: var(--primary); }
+  .card .l { color: var(--muted); font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; background: var(--surface);
+          border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  .scroll { overflow-x: auto; border-radius: 16px; }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line);
+           vertical-align: top; font-size: 15px; }
+  th { background: rgba(63,81,181,.08); font-weight: 700; white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 999px;
+          font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .done { background: rgba(27,156,133,.15); color: var(--green); }
+  .partial { background: rgba(249,168,37,.18); color: #9a6b00; }
+  .planned { background: rgba(93,98,117,.15); color: var(--muted); }
+  ul { margin: 8px 0; padding-left: 20px; }
+  li { margin: 4px 0; }
+  code { background: rgba(127,127,127,.14); padding: 2px 6px; border-radius: 5px;
+         font-size: 13.5px; }
+  .note { background: rgba(28,109,208,.08); border-left: 4px solid var(--blue);
+          padding: 12px 16px; border-radius: 0 12px 12px 0; margin: 14px 0; }
+  .risk { background: rgba(211,47,47,.07); border-left: 4px solid var(--red);
+          padding: 12px 16px; border-radius: 0 12px 12px 0; margin: 14px 0; }
+  footer { margin-top: 40px; color: var(--muted); font-size: 13px;
+           border-top: 1px solid var(--line); padding-top: 16px; }
+  .bar { height: 10px; background: var(--line); border-radius: 999px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--primary), var(--green)); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>EduMate Pro — Project Status Report</h1>
+  <p>A multi-school management platform connecting school administration,
+     principals, teachers and parents: enrollment, attendance, academics,
+     fees, communication and reporting in one Flutter + Firebase application.</p>
+  <div class="meta">
+    <span>Status: Feature-complete build, pre-pilot</span>
+    <span>Platforms: Web · Android · iOS</span>
+    <span>Stack: Flutter 3.35 · Firebase</span>
+    <span>Branch: claude/edumate-pro-platform-vpnqn3</span>
+  </div>
+</header>
+
+<h2>1. Executive summary</h2>
+<p>EduMate Pro has been built from an empty product idea to a working,
+   multi-tenant school platform. The system now supports a platform
+   <strong>Super Admin</strong> who onboards schools and appoints the people who
+   run them, and each school then operates independently: its own staff,
+   learners, classes, subjects, academics, fees, calendar, messaging and email
+   configuration.</p>
+<p>All eleven functional areas requested to date are implemented and verified —
+   the codebase passes static analysis with zero issues, its unit tests pass,
+   and it compiles to a production web release.</p>
+
+<div class="cards">
+  <div class="card"><div class="n">11</div><div class="l">Functional areas delivered</div></div>
+  <div class="card"><div class="n">4+1</div><div class="l">Roles (Super Admin, Admin, Principal, Teacher, Parent)</div></div>
+  <div class="card"><div class="n">~60</div><div class="l">Dart source files</div></div>
+  <div class="card"><div class="n">0</div><div class="l">Analyzer issues</div></div>
+</div>
+
+<h3>Delivery progress</h3>
+<div class="bar"><i style="width:88%"></i></div>
+<p style="color:var(--muted);font-size:14px;margin-top:6px">
+  ~88% — all requested features built; remaining effort is pilot hardening
+  (see §7).</p>
+
+<h2>2. Roles and access model</h2>
+<div class="scroll">
+<table>
+  <tr><th>Role</th><th>Scope</th><th>What they can do</th></tr>
+  <tr>
+    <td><strong>Super Admin</strong></td>
+    <td>Platform, above all schools</td>
+    <td>Create and suspend schools; assign each school's admins and
+        principals by phone number; search across schools.</td>
+  </tr>
+  <tr>
+    <td><strong>School Admin</strong></td>
+    <td>One or more schools</td>
+    <td>Full management of their school(s): staff, learners, classes,
+        subjects, applications, payments, fees, broadcasts, calendar, chat
+        approvals, email settings, progress reports.</td>
+  </tr>
+  <tr>
+    <td><strong>Principal</strong></td>
+    <td>One or more schools</td>
+    <td>Same management rights as School Admin (documented assumption:
+        principals lead the school and are not given fewer powers than the
+        office admin).</td>
+  </tr>
+  <tr>
+    <td><strong>Teacher</strong></td>
+    <td>One or more schools</td>
+    <td>Their classes and subjects; capture marks; publish lesson plans and
+        homework; scan attendance; staff chat; parent chat once approved.</td>
+  </tr>
+  <tr>
+    <td><strong>Parent</strong></td>
+    <td>One or more schools</td>
+    <td>Apply for a child, track the application, view child progress,
+        homework and lesson plans, submit payments with proof, request a
+        teacher chat, receive announcements.</td>
+  </tr>
+</table>
+</div>
+
+<div class="note">
+  <strong>Multi-school by design.</strong> Membership lives at
+  <code>schools/{schoolId}/members/{uid}</code>. A single person can hold a
+  different role at each school; one collection-group query returns every
+  school they belong to, which powers the in-app school switcher. Admins,
+  principals and teachers assigned to several schools see all of them and
+  switch with one tap.
+</div>
+
+<h2>3. Feature status</h2>
+<div class="scroll">
+<table>
+  <tr><th>Area</th><th>Capability</th><th>Status</th></tr>
+
+  <tr><td rowspan="3"><strong>Platform &amp; tenancy</strong></td>
+      <td>Super Admin creates schools, assigns admins/principals, suspends schools</td><td><span class="pill done">Delivered</span></td></tr>
+  <tr><td>Per-school data isolation (all data under <code>schools/{id}/…</code>)</td><td><span class="pill done">Delivered</span></td></tr>
+  <tr><td>Multi-school membership + school switcher</td><td><span class="pill done">Delivered</span></td></tr>
+
+  <tr><td rowspan="2"><strong>Authentication</strong></td>
+      <td>Phone number + SMS OTP for every role (no passwords)</td><td><span class="pill done">Delivered</span></td></tr>
+  <tr><td>Invite-driven staff onboarding; parents self-join a school</td><td><span class="pill done">Delivered</span></td></tr>
+
+  <tr><td rowspan="3"><strong>Enrollment</strong></td>
+      <td>5-step application wizard with document uploads, auto-saved drafts</td><td><span class="pill done">Delivered</span></td></tr>
+  <tr><td>Status pipeline + parent-visible tracking timeline</td><td><span class="pill done">Delivered</span></td></tr>
+  <tr><td>Enrolling creates the learner record and links the parent atomically</td><td><span class="pill done">Delivered</span></td></tr>
+
+  <tr><td rowspan="3"><strong>School management</strong></td>
+      <td>Learners: add/edit, class assignment, parent linking</td><td><span class="pill done">Delivered</span></td></tr>
+  <tr><td>Classes with teacher assignment</td><td><span class="pill done">Delivered</span></td></tr>
+  <tr><td>Subjects per class, each with an assigned teacher</td><td><span class="pill done">Delivered</span></td></tr>
+
+  <tr><td rowspan="3"><strong>Academics</strong></td>
+      <td>Assessments + mark capture per learner per subject (batch mark sheet)</td><td><span class="pill done">Delivered</span></td></tr>
+  <tr><td>Progress reports: per-subject averages, trend, symbols — admin view</td><td><span class="pill done">Delivered</span></td></tr>
+  <tr><td>Parent dashboard showing child progress</td><td><span class="pill done">Delivered</span></td></tr>
+
+  <tr><td rowspan="2"><strong>Teaching</strong></td>
+      <td>Dated lesson plans (single day or date range) per subject</td><td><span class="pill done">Delivered</span></td></tr>
+  <tr><td>Homework with due dates and uploaded worksheets</td><td><span class="pill done">Delivered</span></td></tr>
+
+  <tr><td rowspan="2"><strong>Attendance</strong></td>
+      <td>Per-learner QR code; staff scan to mark in-school / left-school</td><td><span class="pill done">Delivered</span></td></tr>
+  <tr><td>Parents emailed on every drop-off and departure</td><td><span class="pill done">Delivered</span></td></tr>
+
+  <tr><td rowspan="4"><strong>Finance</strong></td>
+      <td>Parent payment form + proof-of-payment upload; admin approval</td><td><span class="pill done">Delivered</span></td></tr>
+  <tr><td>Fee structures per grade/year</td><td><span class="pill done">Delivered</span></td></tr>
+  <tr><td>Outstanding-fees view (who has not paid)</td><td><span class="pill done">Delivered</span></td></tr>
+  <tr><td>Bulk CSV import — template download, staged rows, approve/discard</td><td><span class="pill done">Delivered</span></td></tr>
+
+  <tr><td rowspan="4"><strong>Communication</strong></td>
+      <td>Staff↔staff chat; parent→teacher chat gated on admin approval</td><td><span class="pill done">Delivered</span></td></tr>
+  <tr><td>HTML broadcasts to a learner, a class or the whole school</td><td><span class="pill done">Delivered</span></td></tr>
+  <tr><td>In-app notification bell + announcements feed</td><td><span class="pill done">Delivered</span></td></tr>
+  <tr><td>SMTP email configured in-app by each school (no server)</td><td><span class="pill done">Delivered</span></td></tr>
+
+  <tr><td rowspan="2"><strong>Planning</strong></td>
+      <td>School calendar: whole-school, class or parent audiences</td><td><span class="pill done">Delivered</span></td></tr>
+  <tr><td>Home banner: greeting, latest messages, next 3 events</td><td><span class="pill done">Delivered</span></td></tr>
+
+  <tr><td rowspan="2"><strong>Usability</strong></td>
+      <td>Role-scoped search (Super Admin / admin / teacher)</td><td><span class="pill done">Delivered</span></td></tr>
+  <tr><td>Colourful Material 3 design; per-user palette, mode and text size</td><td><span class="pill done">Delivered</span></td></tr>
+
+  <tr><td><strong>Push notifications</strong></td>
+      <td>True device push (FCM)</td>
+      <td><span class="pill planned">Not in scope</span></td></tr>
+</table>
+</div>
+
+<h2>4. Architecture</h2>
+<h3>Technology</h3>
+<ul>
+  <li><strong>Client:</strong> Flutter (single codebase → Web, Android, iOS),
+      go_router for routing with role guards, Provider for state.</li>
+  <li><strong>Backend:</strong> Firebase — Phone Auth, Cloud Firestore,
+      Cloud Storage. <em>No server component:</em> Cloud Functions were
+      deliberately removed; SMTP email is sent from the app using each
+      school's own configured credentials.</li>
+  <li><strong>Security:</strong> Firestore rules enforce every boundary
+      server-side — membership-based access per school, role checks for
+      management actions, draft-only parent edits, participant-only chat,
+      approved-thread-only messaging, and no self-escalation of roles.</li>
+</ul>
+
+<h3>Data model (per school)</h3>
+<div class="scroll">
+<table>
+  <tr><th>Collection</th><th>Holds</th></tr>
+  <tr><td><code>members</code></td><td>Who belongs to the school and their role</td></tr>
+  <tr><td><code>classes</code> / <code>subjects</code></td><td>Register groups and the subjects taught in them</td></tr>
+  <tr><td><code>learners</code></td><td>Learner records, class assignment, parent links, live attendance state</td></tr>
+  <tr><td><code>applications</code></td><td>Enrollment applications with status timeline and documents</td></tr>
+  <tr><td><code>assessments</code> / <code>marks</code></td><td>Assessments and captured marks per learner</td></tr>
+  <tr><td><code>lessonPlans</code> / <code>homework</code></td><td>Dated lesson plans; homework with due dates</td></tr>
+  <tr><td><code>attendance</code></td><td>Immutable QR scan events</td></tr>
+  <tr><td><code>payments</code> / <code>feeStructures</code> / <code>paymentImports</code></td><td>Finance: submissions, fee config, staged bulk uploads</td></tr>
+  <tr><td><code>chats</code> (+ <code>messages</code>)</td><td>Conversations and their approval state</td></tr>
+  <tr><td><code>broadcasts</code> / <code>events</code></td><td>Announcements and calendar entries</td></tr>
+  <tr><td><code>settings</code> / <code>mailQueue</code></td><td>School SMTP config; outgoing-email audit trail and outbox</td></tr>
+</table>
+</div>
+
+<h2>5. Quality &amp; verification</h2>
+<div class="scroll">
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td><code>flutter analyze</code></td><td><span class="pill done">0 issues</span></td></tr>
+  <tr><td><code>flutter test</code></td><td><span class="pill done">13/13 passing</span></td></tr>
+  <tr><td><code>flutter build web --release</code></td><td><span class="pill done">Compiles</span></td></tr>
+  <tr><td>Security rules coverage</td><td><span class="pill done">All collections have explicit rules</span></td></tr>
+  <tr><td>Automated widget/integration tests</td><td><span class="pill partial">Unit-level only</span></td></tr>
+  <tr><td>Live Firebase project run-through</td><td><span class="pill partial">Not yet performed</span></td></tr>
+</table>
+</div>
+
+<h2>6. Deployment checklist</h2>
+<ol>
+  <li>Create a Firebase project; enable <strong>Phone</strong> authentication
+      and allow the SMS region (e.g. +27).</li>
+  <li>Run <code>flutterfire configure</code>; deploy rules and indexes with
+      <code>firebase deploy --only firestore,storage</code>.</li>
+  <li>Bootstrap the first Super Admin: sign in once, then set
+      <code>users/{uid}.superAdmin = true</code> in the console.</li>
+  <li>Super Admin creates the first school and assigns its admin/principal.</li>
+  <li>That admin configures the school's SMTP details in
+      <em>Email settings</em> and sends a test message.</li>
+  <li>Build and host: <code>flutter build web --release</code> then
+      <code>firebase deploy --only hosting</code>.</li>
+</ol>
+
+<h2>7. Open items and risks</h2>
+<div class="risk">
+  <strong>Web + SMTP.</strong> Browsers cannot open SMTP sockets. Email
+  triggered from the web app is queued in an outbox and delivered when any
+  staff member next uses the Android/iOS/desktop app. If a school will only
+  ever use the web, a small mail relay (or restoring a single Cloud Function)
+  would be needed for immediate delivery.
+</div>
+<div class="risk">
+  <strong>SMTP credentials are stored in Firestore</strong> and readable by
+  that school's staff, because the app itself sends the mail. Use a dedicated
+  no-reply mailbox / app password per school rather than a shared corporate
+  account.
+</div>
+<ul>
+  <li><strong>Push notifications</strong> — broadcasts are in-app + email;
+      true device push needs a server component.</li>
+  <li><strong>Search scale</strong> — client-side matching is right for a
+      school-sized dataset; a search index would be needed at very large
+      scale.</li>
+  <li><strong>Reporting exports</strong> — progress reports are on-screen;
+      PDF/printable report cards are a natural next step.</li>
+  <li><strong>Testing depth</strong> — add widget tests for the wizard, mark
+      capture and rules tests via the Firebase emulator before pilot.</li>
+  <li><strong>Localisation</strong> — English only in this iteration.</li>
+</ul>
+
+<h2>8. Recommended next phase</h2>
+<ol>
+  <li>Pilot with one school on a live Firebase project (2–3 weeks).</li>
+  <li>Add printable/PDF report cards and fee statements.</li>
+  <li>Firebase emulator rule tests + widget tests for the critical flows.</li>
+  <li>Decide on push notifications (requires a minimal server or FCM
+      integration).</li>
+  <li>Localisation (Afrikaans, isiZulu) if required by the pilot school.</li>
+</ol>
+
+<footer>
+  EduMate Pro — generated project status report. Prepared from the current
+  state of the repository on branch
+  <code>claude/edumate-pro-platform-vpnqn3</code>.
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,6 +1,152 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'app_user.dart';
 import 'enums.dart';
+
+/// A school on the platform, at `schools/{schoolId}`. Created by a Super
+/// Admin, who then assigns the admin(s) / principal(s) who run it. All of a
+/// school's data (classes, learners, applications, payments, chats,
+/// attendance, events, fees, settings) lives in subcollections of this
+/// document, so schools are fully isolated from one another.
+class School {
+  const School({
+    required this.id,
+    required this.name,
+    this.address = '',
+    this.phone = '',
+    this.email = '',
+    this.motto = '',
+    this.active = true,
+    this.createdAt,
+  });
+
+  final String id;
+  final String name;
+  final String address;
+  final String phone;
+  final String email;
+  final String motto;
+
+  /// A Super Admin can suspend a school without deleting its data.
+  final bool active;
+  final DateTime? createdAt;
+
+  Map<String, dynamic> toMap() => {
+        'name': name,
+        'address': address,
+        'phone': phone,
+        'email': email,
+        'motto': motto,
+        'active': active,
+        'createdAt': createdAt != null
+            ? Timestamp.fromDate(createdAt!)
+            : FieldValue.serverTimestamp(),
+      };
+
+  factory School.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final m = doc.data() ?? const {};
+    return School(
+      id: doc.id,
+      name: (m['name'] ?? '') as String,
+      address: (m['address'] ?? '') as String,
+      phone: (m['phone'] ?? '') as String,
+      email: (m['email'] ?? '') as String,
+      motto: (m['motto'] ?? '') as String,
+      active: (m['active'] ?? true) as bool,
+      createdAt: (m['createdAt'] as Timestamp?)?.toDate(),
+    );
+  }
+}
+
+/// A person's membership of one school, at
+/// `schools/{schoolId}/members/{uid}`.
+///
+/// This is the single source of truth for "who belongs to which school, as
+/// what". A user discovers **all** the schools they belong to with one
+/// collection-group query on `uid`, which is what lets an admin, principal
+/// or teacher assigned to several schools see and switch between them. It
+/// doubles as each school's staff/parent directory.
+class SchoolMembership {
+  const SchoolMembership({
+    required this.schoolId,
+    required this.uid,
+    required this.role,
+    this.schoolName = '',
+    this.firstName = '',
+    this.lastName = '',
+    this.phone,
+    this.email,
+    this.active = true,
+    this.joinedAt,
+  });
+
+  final String schoolId;
+
+  /// Denormalised so the school switcher can label memberships without
+  /// reading every school document.
+  final String schoolName;
+  final String uid;
+  final UserRole role;
+  final String firstName;
+  final String lastName;
+  final String? phone;
+  final String? email;
+  final bool active;
+  final DateTime? joinedAt;
+
+  String get fullName {
+    final n = '$firstName $lastName'.trim();
+    return n.isEmpty ? (phone ?? 'User') : n;
+  }
+
+  Map<String, dynamic> toMap() => {
+        'schoolId': schoolId,
+        'schoolName': schoolName,
+        'uid': uid,
+        'role': role.name,
+        'firstName': firstName,
+        'lastName': lastName,
+        'phone': phone,
+        'email': email,
+        'active': active,
+        'joinedAt': joinedAt != null
+            ? Timestamp.fromDate(joinedAt!)
+            : FieldValue.serverTimestamp(),
+      };
+
+  factory SchoolMembership.fromDoc(
+      DocumentSnapshot<Map<String, dynamic>> doc) {
+    final m = doc.data() ?? const {};
+    return SchoolMembership(
+      // Fall back to the document path when the field is missing.
+      schoolId: (m['schoolId'] ?? doc.reference.parent.parent?.id ?? '')
+          as String,
+      schoolName: (m['schoolName'] ?? '') as String,
+      uid: (m['uid'] ?? doc.id) as String,
+      role: UserRole.fromString(m['role'] as String?),
+      firstName: (m['firstName'] ?? '') as String,
+      lastName: (m['lastName'] ?? '') as String,
+      phone: m['phone'] as String?,
+      email: m['email'] as String?,
+      active: (m['active'] ?? true) as bool,
+      joinedAt: (m['joinedAt'] as Timestamp?)?.toDate(),
+    );
+  }
+
+  /// The directory entry as an [AppUser], so screens that list staff or
+  /// parents (chat pickers, broadcast recipients, parent linking) work off
+  /// one shared type.
+  AppUser toAppUser() => AppUser(
+        uid: uid,
+        role: role,
+        phone: phone,
+        email: email,
+        firstName: firstName,
+        lastName: lastName,
+        active: active,
+        profileComplete: true,
+      );
+}
 
 /// A class/register group at `classes/{id}` (e.g. "Grade 4 Blue"), optionally
 /// assigned to a teacher. Learners reference their class via `classId`.

@@ -6,6 +6,7 @@ import '../../models/app_user.dart';
 import '../../models/enums.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
+import '../../state/auth_controller.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/common.dart';
 
@@ -109,7 +110,8 @@ class AdminStaffScreen extends StatelessWidget {
             SectionCard(
               title: 'Pending invites',
               child: StreamBuilder<List<StaffInvite>>(
-                stream: db.watchStaffInvites(),
+                stream: db.watchStaffInvites(
+                    context.read<AuthController>().activeSchoolId ?? ''),
                 builder: (context, snap) {
                   final invites =
                       (snap.data ?? []).where((i) => !i.claimed).toList();
@@ -131,7 +133,7 @@ class AdminStaffScreen extends StatelessWidget {
                                 tooltip: 'Cancel invite',
                                 icon: const Icon(Icons.delete_outline),
                                 onPressed: () =>
-                                    db.deleteStaffInvite(i.phone),
+                                    db.deleteStaffInvite(i.id),
                               ),
                             ))
                         .toList(),
@@ -176,9 +178,13 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
     final db = context.read<FirestoreService>();
     setState(() => _saving = true);
     try {
+      final auth = context.read<AuthController>();
       await db.createStaffInvite(StaffInvite(
+        id: '',
         phone: AuthService.toE164(_phone.text),
         role: _role,
+        schoolId: auth.activeSchoolId ?? '',
+        schoolName: auth.activeSchoolName,
         firstName: _first.text.trim(),
         lastName: _last.text.trim(),
         email: _email.text.trim().isEmpty ? null : _email.text.trim(),
@@ -211,6 +217,8 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
                   segments: const [
                     ButtonSegment(
                         value: UserRole.teacher, label: Text('Teacher')),
+                    ButtonSegment(
+                        value: UserRole.principal, label: Text('Principal')),
                     ButtonSegment(value: UserRole.admin, label: Text('Admin')),
                   ],
                   selected: {_role},

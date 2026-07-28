@@ -46,6 +46,19 @@ class AppShell extends StatelessWidget {
     if (auth.needsProfile) {
       return const [NavItem('My profile', Routes.profile)];
     }
+    if (auth.isSuperAdmin) {
+      return const [
+        NavItem('Schools', Routes.superHome),
+        NavItem('Search', Routes.search),
+        NavItem('My profile', Routes.profile),
+      ];
+    }
+    if (auth.needsSchool) {
+      return const [
+        NavItem('Choose a school', Routes.joinSchool),
+        NavItem('My profile', Routes.profile),
+      ];
+    }
     switch (auth.role) {
       case UserRole.parent:
         return const [
@@ -59,19 +72,21 @@ class AppShell extends StatelessWidget {
       case UserRole.teacher:
         return const [
           NavItem('My classes', Routes.teacherHome),
+          NavItem('Search', Routes.search),
           NavItem('Scan', Routes.scan),
           NavItem('Calendar', Routes.calendar),
           NavItem('Messages', Routes.chats),
           NavItem('My profile', Routes.profile),
         ];
       case UserRole.admin:
+      case UserRole.principal:
         // The rest of the admin area (classes, staff, broadcasts, calendar,
         // email settings, chat requests) is reached from dashboard tiles.
         return const [
           NavItem('Dashboard', Routes.adminHome),
-          NavItem('Scan', Routes.scan),
-          NavItem('Applications', Routes.adminApplications),
+          NavItem('Search', Routes.search),
           NavItem('Learners', Routes.adminLearners),
+          NavItem('Applications', Routes.adminApplications),
           NavItem('Payments', Routes.adminPayments),
           NavItem('Fees', Routes.adminFees),
           NavItem('Messages', Routes.chats),
@@ -91,9 +106,7 @@ class AppShell extends StatelessWidget {
       appBar: AppBar(
         title: InkWell(
           onTap: () => context.go(
-            auth.isAuthenticated
-                ? homeFor(auth.role, auth.needsProfile)
-                : Routes.landing,
+            auth.isAuthenticated ? auth.homePath : Routes.landing,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -114,6 +127,8 @@ class AppShell extends StatelessWidget {
           ),
         ),
         actions: [
+          if (isDesktop && auth.memberships.isNotEmpty)
+            const _SchoolSwitcher(),
           if (isDesktop)
             ...items.map((it) => TextButton(
                   onPressed: () => context.go(it.route),
@@ -154,6 +169,96 @@ class AppShell extends StatelessWidget {
           ),
           const _Footer(),
         ],
+      ),
+    );
+  }
+}
+
+/// Shows the school the user is currently working in. When they belong to
+/// more than one — an admin, principal or teacher assigned to several
+/// schools — it becomes a menu for switching between them.
+class _SchoolSwitcher extends StatelessWidget {
+  const _SchoolSwitcher();
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthController>();
+    final active = auth.activeMembership;
+    if (active == null) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+
+    final label = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.apartment, size: 16, color: scheme.onPrimaryContainer),
+          const SizedBox(width: 6),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 180),
+            child: Text(
+              active.schoolName.isEmpty ? 'My school' : active.schoolName,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  color: scheme.onPrimaryContainer,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13),
+            ),
+          ),
+          if (auth.hasMultipleSchools)
+            Icon(Icons.arrow_drop_down,
+                size: 18, color: scheme.onPrimaryContainer),
+        ],
+      ),
+    );
+
+    if (!auth.hasMultipleSchools) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Tooltip(message: active.role.label, child: label),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: PopupMenuButton<String>(
+        tooltip: 'Switch school',
+        onSelected: (id) async {
+          await context.read<AuthController>().switchSchool(id);
+          if (context.mounted) context.go(context.read<AuthController>().homePath);
+        },
+        itemBuilder: (_) => auth.memberships
+            .map((m) => PopupMenuItem<String>(
+                  value: m.schoolId,
+                  child: Row(
+                    children: [
+                      Icon(
+                        m.schoolId == active.schoolId
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_unchecked,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(m.schoolName.isEmpty
+                              ? 'School'
+                              : m.schoolName),
+                          Text(m.role.label,
+                              style: const TextStyle(
+                                  fontSize: 11, color: Colors.grey)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ))
+            .toList(),
+        child: label,
       ),
     );
   }

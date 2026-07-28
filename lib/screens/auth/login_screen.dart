@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/responsive.dart';
-import '../../router/app_router.dart';
 import '../../state/auth_controller.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/phone_auth_form.dart';
@@ -48,7 +47,7 @@ class LoginScreen extends StatelessWidget {
                 child: PhoneAuthForm(
                   onVerified: () {
                     final auth = context.read<AuthController>();
-                    context.go(homeFor(auth.role, auth.needsProfile));
+                    context.go(auth.homePath);
                   },
                 ),
               ),

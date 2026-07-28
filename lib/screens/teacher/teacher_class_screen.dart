@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/responsive.dart';
+import '../../models/academics.dart';
 import '../../models/school.dart';
+import '../../router/app_router.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/common.dart';
@@ -39,6 +42,39 @@ class TeacherClassScreen extends StatelessWidget {
                   Text([cls.grade, if (cls.year != null) '${cls.year}']
                           .join(' · '),
                       style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height: 16),
+                SectionCard(
+                  title: 'Subjects I teach in this class',
+                  child: StreamBuilder<List<Subject>>(
+                    stream: db.watchSubjectsForClass(classId),
+                    builder: (context, snap) {
+                      final subjects = snap.data ?? [];
+                      if (subjects.isEmpty) {
+                        return const Text(
+                            'No subjects added to this class yet — the '
+                            'school admin sets these up.',
+                            style: TextStyle(color: Colors.grey));
+                      }
+                      return Column(
+                        children: subjects
+                            .map((s) => ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: const Icon(
+                                      Icons.menu_book_outlined),
+                                  title: Text(s.name),
+                                  subtitle: Text(s.teacherName.isEmpty
+                                      ? 'No teacher assigned'
+                                      : s.teacherName),
+                                  trailing:
+                                      const Icon(Icons.chevron_right),
+                                  onTap: () => context
+                                      .go(Routes.teacherSubject(s.id)),
+                                ))
+                            .toList(),
+                      );
+                    },
+                  ),
+                ),
                 const SizedBox(height: 16),
                 SectionCard(
                   title: 'Learners',

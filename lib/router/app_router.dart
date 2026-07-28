@@ -11,23 +11,30 @@ import '../screens/admin/admin_fees_screen.dart';
 import '../screens/admin/admin_home_screen.dart';
 import '../screens/admin/admin_learners_screen.dart';
 import '../screens/admin/admin_payments_screen.dart';
+import '../screens/admin/admin_progress_screen.dart';
 import '../screens/admin/admin_staff_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/chat/chat_list_screen.dart';
 import '../screens/chat/chat_thread_screen.dart';
 import '../screens/chat/new_chat_screen.dart';
 import '../screens/common/calendar_screen.dart';
+import '../screens/common/join_school_screen.dart';
 import '../screens/common/landing_screen.dart';
 import '../screens/common/profile_screen.dart';
+import '../screens/common/search_screen.dart';
 import '../screens/common/settings_screen.dart';
 import '../screens/parent/announcements_screen.dart';
 import '../screens/parent/application_detail_screen.dart';
+import '../screens/parent/child_progress_screen.dart';
 import '../screens/parent/application_wizard_screen.dart';
 import '../screens/parent/parent_home_screen.dart';
 import '../screens/parent/parent_payments_screen.dart';
 import '../screens/staff/scan_screen.dart';
+import '../screens/superadmin/super_school_detail_screen.dart';
+import '../screens/superadmin/super_schools_screen.dart';
 import '../screens/teacher/teacher_class_screen.dart';
 import '../screens/teacher/teacher_home_screen.dart';
+import '../screens/teacher/teacher_subject_screen.dart';
 import '../state/auth_controller.dart';
 
 /// Route paths, referenced from navigation so there are no magic strings.
@@ -42,8 +49,12 @@ class Routes {
   static const parentPayments = '/parent/payments';
   static String applicationDetail(String id) => '/parent/applications/$id';
 
+  /// A parent's view of one child's progress (marks, homework, lessons).
+  static String childProgress(String id) => '/parent/child/$id';
+
   static const teacherHome = '/teacher';
   static String teacherClass(String id) => '/teacher/class/$id';
+  static String teacherSubject(String id) => '/teacher/subject/$id';
 
   static const adminHome = '/admin';
   static const adminStaff = '/admin/staff';
@@ -54,8 +65,16 @@ class Routes {
   static const adminPayments = '/admin/payments';
   static const adminChatRequests = '/admin/chat-requests';
   static const adminFees = '/admin/fees';
+  static const adminProgress = '/admin/progress';
   static const adminBroadcasts = '/admin/broadcasts';
   static const adminEmailSettings = '/admin/email-settings';
+
+  /// Super Admin console (platform level, above any school).
+  static const superHome = '/super';
+  static String superSchoolDetail(String id) => '/super/schools/$id';
+
+  /// Shown when a signed-in user belongs to no school yet.
+  static const joinSchool = '/join';
 
   static const chats = '/chats';
   static const newChat = '/chats/new';
@@ -67,9 +86,14 @@ class Routes {
   /// School calendar (all roles) and the parent announcements feed.
   static const calendar = '/calendar';
   static const announcements = '/announcements';
+
+  /// Role-scoped search (Super Admin, school admin/principal, teacher).
+  static const search = '/search';
 }
 
-/// Home path for a given role + profile-completion state.
+/// Home path for a given role + profile-completion state. Prefer
+/// `AuthController.homePath`, which also accounts for Super Admins and
+/// users who have not joined a school yet.
 String homeFor(UserRole? role, bool needsProfile) {
   if (needsProfile) return Routes.profile;
   switch (role) {
@@ -78,9 +102,10 @@ String homeFor(UserRole? role, bool needsProfile) {
     case UserRole.teacher:
       return Routes.teacherHome;
     case UserRole.admin:
+    case UserRole.principal:
       return Routes.adminHome;
     case null:
-      return Routes.login;
+      return Routes.joinSchool;
   }
 }
 
@@ -100,7 +125,7 @@ GoRouter createRouter(AuthController auth) {
       }
 
       // ---- Authenticated --------------------------------------------------
-      final home = homeFor(role, auth.needsProfile);
+      final home = auth.homePath;
 
       // Bounce away from the login page once signed in.
       if (loc == Routes.login) return home;
@@ -112,6 +137,27 @@ GoRouter createRouter(AuthController auth) {
           loc != Routes.settings) {
         return Routes.profile;
       }
+
+      // Super Admins work above schools: the console is theirs alone.
+      if (auth.isSuperAdmin) {
+        const allowed = {Routes.profile, Routes.settings};
+        if (!loc.startsWith(Routes.superHome) && !allowed.contains(loc)) {
+          return Routes.superHome;
+        }
+        return null;
+      }
+      if (loc.startsWith(Routes.superHome)) return home;
+
+      // Belonging to a school comes before anything school-scoped.
+      if (auth.needsSchool) {
+        const allowed = {
+          Routes.joinSchool,
+          Routes.profile,
+          Routes.settings,
+        };
+        return allowed.contains(loc) ? null : Routes.joinSchool;
+      }
+      if (loc == Routes.joinSchool) return home;
 
       // Role guards — each role stays inside its own area (+ shared routes).
       switch (role) {
@@ -128,6 +174,7 @@ GoRouter createRouter(AuthController auth) {
           }
           break;
         case UserRole.admin:
+        case UserRole.principal:
           if (loc.startsWith('/parent') || loc.startsWith('/teacher')) {
             return home;
           }
@@ -143,6 +190,19 @@ GoRouter createRouter(AuthController auth) {
       GoRoute(path: Routes.profile, builder: (_, __) => const ProfileScreen()),
       GoRoute(
           path: Routes.settings, builder: (_, __) => const SettingsScreen()),
+      GoRoute(
+          path: Routes.joinSchool,
+          builder: (_, __) => const JoinSchoolScreen()),
+
+      // Super Admin console
+      GoRoute(
+          path: Routes.superHome,
+          builder: (_, __) => const SuperSchoolsScreen()),
+      GoRoute(
+        path: '/super/schools/:id',
+        builder: (_, state) =>
+            SuperSchoolDetailScreen(schoolId: state.pathParameters['id']!),
+      ),
 
       // Parent
       GoRoute(
@@ -157,6 +217,11 @@ GoRouter createRouter(AuthController auth) {
           path: Routes.parentPayments,
           builder: (_, __) => const ParentPaymentsScreen()),
       GoRoute(
+        path: '/parent/child/:id',
+        builder: (_, state) =>
+            ChildProgressScreen(learnerId: state.pathParameters['id']!),
+      ),
+      GoRoute(
         path: '/parent/applications/:id',
         builder: (_, state) =>
             ApplicationDetailScreen(applicationId: state.pathParameters['id']!),
@@ -170,6 +235,11 @@ GoRouter createRouter(AuthController auth) {
         path: '/teacher/class/:id',
         builder: (_, state) =>
             TeacherClassScreen(classId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/teacher/subject/:id',
+        builder: (_, state) =>
+            TeacherSubjectScreen(subjectId: state.pathParameters['id']!),
       ),
 
       // Admin
@@ -202,6 +272,9 @@ GoRouter createRouter(AuthController auth) {
           path: Routes.adminFees,
           builder: (_, __) => const AdminFeesScreen()),
       GoRoute(
+          path: Routes.adminProgress,
+          builder: (_, __) => const AdminProgressScreen()),
+      GoRoute(
           path: Routes.adminBroadcasts,
           builder: (_, __) => const AdminBroadcastsScreen()),
       GoRoute(
@@ -215,6 +288,7 @@ GoRouter createRouter(AuthController auth) {
       GoRoute(
           path: Routes.announcements,
           builder: (_, __) => const AnnouncementsScreen()),
+      GoRoute(path: Routes.search, builder: (_, __) => const SearchScreen()),
 
       // QR attendance scanner (staff only, guarded above)
       GoRoute(path: Routes.scan, builder: (_, __) => const ScanScreen()),

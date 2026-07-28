@@ -111,6 +111,13 @@ class AdminHomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             DashboardTile(
+              icon: Icons.insights_outlined,
+              title: 'Progress reports',
+              subtitle: 'Learner results per subject, class by class',
+              onTap: () => context.go(Routes.adminProgress),
+            ),
+            const SizedBox(height: 8),
+            DashboardTile(
               icon: Icons.request_quote_outlined,
               title: 'Fees',
               subtitle: 'Configure fees, outstanding balances, recording '

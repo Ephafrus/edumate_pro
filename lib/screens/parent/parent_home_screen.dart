@@ -49,6 +49,13 @@ class ParentHomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             DashboardTile(
+              icon: Icons.calendar_month_outlined,
+              title: 'School calendar',
+              subtitle: 'Term dates, class events and school activities',
+              onTap: () => context.go(Routes.calendar),
+            ),
+            const SizedBox(height: 8),
+            DashboardTile(
               icon: Icons.chat_outlined,
               title: 'Messages',
               subtitle: "Request a chat with your child's teacher",
@@ -57,6 +64,8 @@ class ParentHomeScreen extends StatelessWidget {
             const SizedBox(height: 20),
             SectionCard(
               title: 'My children',
+              trailing: Text('Tap a child for progress',
+                  style: Theme.of(context).textTheme.bodySmall),
               child: StreamBuilder<List<Learner>>(
                 stream: db.watchLearnersForParent(user.uid),
                 builder: (context, snap) {
@@ -119,13 +128,8 @@ class ParentHomeScreen extends StatelessWidget {
                                   ),
                                 ],
                               ),
-                              onTap: () => showDialog(
-                                context: context,
-                                builder: (_) => LearnerQrDialog(
-                                  learnerId: l.id,
-                                  learnerName: l.fullName,
-                                ),
-                              ),
+                              onTap: () =>
+                                  context.go(Routes.childProgress(l.id)),
                             ))
                         .toList(),
                   );

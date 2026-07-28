@@ -1,14 +1,24 @@
 /// App-wide constants: Firestore collection names, reference data lists, and
 /// small configuration values used across the EduMate Pro app.
 class Collections {
+  /// Global (platform-level) collections.
   static const users = 'users';
+  static const schools = 'schools';
   static const staffInvites = 'staffInvites';
+
+  /// Per-school subcollection of `schools/{schoolId}`.
+  static const members = 'members';
   static const classes = 'classes';
   static const learners = 'learners';
   static const applications = 'applications';
   static const payments = 'payments';
   static const chats = 'chats';
   static const attendance = 'attendance';
+  static const subjects = 'subjects';
+  static const assessments = 'assessments';
+  static const marks = 'marks';
+  static const lessonPlans = 'lessonPlans';
+  static const homework = 'homework';
   static const mailQueue = 'mailQueue';
   static const settings = 'settings';
   static const broadcasts = 'broadcasts';

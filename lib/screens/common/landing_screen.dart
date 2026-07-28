@@ -71,7 +71,7 @@ class LandingScreen extends StatelessWidget {
                       foregroundColor: scheme.primary,
                     ),
                     onPressed: () => context.go(auth.isAuthenticated
-                        ? homeFor(auth.role, auth.needsProfile)
+                        ? auth.homePath
                         : Routes.login),
                     icon: const Icon(Icons.login),
                     label: Text(auth.isAuthenticated

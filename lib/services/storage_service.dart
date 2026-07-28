@@ -37,6 +37,18 @@ class StorageService {
     return _put(ref, bytes, contentType);
   }
 
+  /// Uploads a homework worksheet set by a teacher.
+  Future<String> uploadHomework(
+    String schoolId,
+    Uint8List bytes, {
+    required String filename,
+    String? contentType,
+  }) {
+    final stamp = DateTime.now().millisecondsSinceEpoch;
+    final ref = _storage.ref('homework/$schoolId/$stamp-$filename');
+    return _put(ref, bytes, contentType);
+  }
+
   /// Uploads a profile photo and returns its download URL.
   Future<String> uploadProfilePhoto(
     String uid,
