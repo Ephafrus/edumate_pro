@@ -11,6 +11,7 @@ import '../../models/payment.dart';
 import '../../models/school.dart';
 import '../../router/app_router.dart';
 import '../../services/firestore_service.dart';
+import '../../services/mail_service.dart';
 import '../../state/auth_controller.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/common.dart';
@@ -24,6 +25,8 @@ class AdminHomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final db = context.read<FirestoreService>();
     final user = context.watch<AuthController>().appUser;
+    // Deliver any email queued from web sessions / SMTP hiccups.
+    context.read<MailService>().flushOutboxSoon();
 
     return AppShell(
       title: 'Dashboard',
@@ -114,6 +117,36 @@ class AdminHomeScreen extends StatelessWidget {
                   onTap: () => context.go(Routes.adminLearners),
                 );
               },
+            ),
+            const SizedBox(height: 8),
+            DashboardTile(
+              icon: Icons.request_quote_outlined,
+              title: 'Fees',
+              subtitle: 'Configure fees, outstanding balances, recording '
+                  'and bulk imports',
+              onTap: () => context.go(Routes.adminFees),
+            ),
+            const SizedBox(height: 8),
+            DashboardTile(
+              icon: Icons.campaign_outlined,
+              title: 'Broadcast messages',
+              subtitle: 'HTML notices to a learner, a class or the whole '
+                  'school — in-app + email',
+              onTap: () => context.go(Routes.adminBroadcasts),
+            ),
+            const SizedBox(height: 8),
+            DashboardTile(
+              icon: Icons.calendar_month_outlined,
+              title: 'School calendar',
+              subtitle: 'Events for the school, classes or parents',
+              onTap: () => context.go(Routes.calendar),
+            ),
+            const SizedBox(height: 8),
+            DashboardTile(
+              icon: Icons.outgoing_mail,
+              title: 'Email settings',
+              subtitle: 'School SMTP details used for all notifications',
+              onTap: () => context.go(Routes.adminEmailSettings),
             ),
             const SizedBox(height: 8),
             StreamBuilder<List<SchoolClass>>(

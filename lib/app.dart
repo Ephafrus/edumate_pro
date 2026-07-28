@@ -6,6 +6,7 @@ import 'core/theme.dart';
 import 'router/app_router.dart';
 import 'services/auth_service.dart';
 import 'services/firestore_service.dart';
+import 'services/mail_service.dart';
 import 'services/storage_service.dart';
 import 'state/auth_controller.dart';
 import 'state/theme_controller.dart';
@@ -28,6 +29,8 @@ class EduMateApp extends StatelessWidget {
         Provider<AuthService>(create: (_) => AuthService()),
         Provider<FirestoreService>(create: (_) => FirestoreService()),
         Provider<StorageService>(create: (_) => StorageService()),
+        Provider<MailService>(
+            create: (ctx) => MailService(ctx.read<FirestoreService>())),
         ChangeNotifierProvider<ThemeController>(
             create: (_) => ThemeController()),
         ChangeNotifierProvider<AuthController>(

@@ -175,6 +175,93 @@ enum ChatApproval {
   }
 }
 
+/// Destination of a broadcast message.
+enum BroadcastScope {
+  school,
+  schoolClass,
+  learner;
+
+  static BroadcastScope fromString(String? s) {
+    switch (s) {
+      case 'schoolClass':
+        return BroadcastScope.schoolClass;
+      case 'learner':
+        return BroadcastScope.learner;
+      default:
+        return BroadcastScope.school;
+    }
+  }
+
+  String get label {
+    switch (this) {
+      case BroadcastScope.school:
+        return 'Whole school';
+      case BroadcastScope.schoolClass:
+        return 'A class';
+      case BroadcastScope.learner:
+        return 'One learner';
+    }
+  }
+}
+
+/// Who a calendar event is for.
+enum EventAudience {
+  school,
+  schoolClass,
+  parents;
+
+  static EventAudience fromString(String? s) {
+    switch (s) {
+      case 'schoolClass':
+        return EventAudience.schoolClass;
+      case 'parents':
+        return EventAudience.parents;
+      default:
+        return EventAudience.school;
+    }
+  }
+
+  String get label {
+    switch (this) {
+      case EventAudience.school:
+        return 'Whole school';
+      case EventAudience.schoolClass:
+        return 'A class';
+      case EventAudience.parents:
+        return 'All parents';
+    }
+  }
+}
+
+/// Lifecycle of a staged bulk payment import (paymentImports/{id}).
+enum ImportStatus {
+  staged,
+  approved,
+  discarded;
+
+  static ImportStatus fromString(String? s) {
+    switch (s) {
+      case 'approved':
+        return ImportStatus.approved;
+      case 'discarded':
+        return ImportStatus.discarded;
+      default:
+        return ImportStatus.staged;
+    }
+  }
+
+  String get label {
+    switch (this) {
+      case ImportStatus.staged:
+        return 'Awaiting approval';
+      case ImportStatus.approved:
+        return 'Approved';
+      case ImportStatus.discarded:
+        return 'Discarded';
+    }
+  }
+}
+
 /// A QR attendance scan event: arriving at school or leaving it.
 enum AttendanceType {
   checkIn,

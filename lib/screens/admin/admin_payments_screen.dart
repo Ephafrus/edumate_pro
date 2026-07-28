@@ -6,6 +6,7 @@ import '../../core/responsive.dart';
 import '../../models/enums.dart';
 import '../../models/payment.dart';
 import '../../services/firestore_service.dart';
+import '../../services/mail_service.dart';
 import '../../state/auth_controller.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/common.dart';
@@ -24,6 +25,7 @@ class _AdminPaymentsScreenState extends State<AdminPaymentsScreen> {
 
   Future<void> _review(PaymentRecord p, PaymentStatus status) async {
     final db = context.read<FirestoreService>();
+    final mail = context.read<MailService>();
     final byName = context.read<AuthController>().appUser?.fullName ?? '';
 
     String note = '';
@@ -58,9 +60,25 @@ class _AdminPaymentsScreenState extends State<AdminPaymentsScreen> {
     }
 
     await db.reviewPayment(p.id, status, note: note, byName: byName);
+
+    // Notify the parent over the school's SMTP.
+    var mailNote = '';
+    final parent = await db.getUser(p.parentUid);
+    if (parent?.email != null && parent!.email!.isNotEmpty) {
+      final email = MailService.paymentEmail(
+        parentFirstName: parent.firstName,
+        purpose: p.purpose,
+        amountLabel: p.amountLabel,
+        learnerName: p.learnerName,
+        approved: status == PaymentStatus.approved,
+        reviewNote: note,
+      );
+      final outcome = await mail.send(
+          to: parent.email!, subject: email.subject, text: email.text);
+      mailNote = ' — ${outcome.label}';
+    }
     if (mounted) {
-      showSnack(context,
-          'Payment ${status.label.toLowerCase()} — the parent will be emailed.');
+      showSnack(context, 'Payment ${status.label.toLowerCase()}$mailNote.');
     }
   }
 

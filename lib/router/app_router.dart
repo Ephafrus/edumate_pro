@@ -3,8 +3,11 @@ import 'package:go_router/go_router.dart';
 import '../models/enums.dart';
 import '../screens/admin/admin_applications_screen.dart';
 import '../screens/admin/admin_application_detail_screen.dart';
+import '../screens/admin/admin_broadcasts_screen.dart';
 import '../screens/admin/admin_chat_requests_screen.dart';
 import '../screens/admin/admin_classes_screen.dart';
+import '../screens/admin/admin_email_settings_screen.dart';
+import '../screens/admin/admin_fees_screen.dart';
 import '../screens/admin/admin_home_screen.dart';
 import '../screens/admin/admin_learners_screen.dart';
 import '../screens/admin/admin_payments_screen.dart';
@@ -13,9 +16,11 @@ import '../screens/auth/login_screen.dart';
 import '../screens/chat/chat_list_screen.dart';
 import '../screens/chat/chat_thread_screen.dart';
 import '../screens/chat/new_chat_screen.dart';
+import '../screens/common/calendar_screen.dart';
 import '../screens/common/landing_screen.dart';
 import '../screens/common/profile_screen.dart';
 import '../screens/common/settings_screen.dart';
+import '../screens/parent/announcements_screen.dart';
 import '../screens/parent/application_detail_screen.dart';
 import '../screens/parent/application_wizard_screen.dart';
 import '../screens/parent/parent_home_screen.dart';
@@ -48,6 +53,9 @@ class Routes {
   static String adminApplicationDetail(String id) => '/admin/applications/$id';
   static const adminPayments = '/admin/payments';
   static const adminChatRequests = '/admin/chat-requests';
+  static const adminFees = '/admin/fees';
+  static const adminBroadcasts = '/admin/broadcasts';
+  static const adminEmailSettings = '/admin/email-settings';
 
   static const chats = '/chats';
   static const newChat = '/chats/new';
@@ -55,6 +63,10 @@ class Routes {
 
   /// QR attendance scanner — teachers and all school staff.
   static const scan = '/scan';
+
+  /// School calendar (all roles) and the parent announcements feed.
+  static const calendar = '/calendar';
+  static const announcements = '/announcements';
 }
 
 /// Home path for a given role + profile-completion state.
@@ -186,6 +198,23 @@ GoRouter createRouter(AuthController auth) {
       GoRoute(
           path: Routes.adminChatRequests,
           builder: (_, __) => const AdminChatRequestsScreen()),
+      GoRoute(
+          path: Routes.adminFees,
+          builder: (_, __) => const AdminFeesScreen()),
+      GoRoute(
+          path: Routes.adminBroadcasts,
+          builder: (_, __) => const AdminBroadcastsScreen()),
+      GoRoute(
+          path: Routes.adminEmailSettings,
+          builder: (_, __) => const AdminEmailSettingsScreen()),
+
+      // Shared (all authenticated roles)
+      GoRoute(
+          path: Routes.calendar,
+          builder: (_, __) => const CalendarScreen()),
+      GoRoute(
+          path: Routes.announcements,
+          builder: (_, __) => const AnnouncementsScreen()),
 
       // QR attendance scanner (staff only, guarded above)
       GoRoute(path: Routes.scan, builder: (_, __) => const ScanScreen()),

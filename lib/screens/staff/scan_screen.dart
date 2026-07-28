@@ -7,6 +7,7 @@ import '../../models/attendance.dart';
 import '../../models/enums.dart';
 import '../../models/school.dart';
 import '../../services/firestore_service.dart';
+import '../../services/mail_service.dart';
 import '../../state/auth_controller.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/common.dart';
@@ -189,17 +190,37 @@ class _LearnerSheetState extends State<_LearnerSheet> {
 
   Future<void> _mark(AttendanceType type) async {
     final db = context.read<FirestoreService>();
+    final mail = context.read<MailService>();
     final me = context.read<AuthController>().appUser;
     if (me == null) return;
     setState(() => _saving = true);
     try {
       await db.recordAttendance(widget.learner, type, by: me);
+
+      // Email every linked parent over the school's SMTP.
+      final now = DateTime.now();
+      var notified = 0;
+      for (final uid in widget.learner.parentUids) {
+        final parent = await db.getUser(uid);
+        final address = parent?.email;
+        if (address == null || address.isEmpty) continue;
+        final email = MailService.attendanceEmail(
+          parentFirstName: parent!.firstName,
+          learnerName: widget.learner.fullName,
+          type: type,
+          at: now,
+          byName: me.fullName,
+        );
+        await mail.send(
+            to: address, subject: email.subject, text: email.text);
+        notified++;
+      }
       if (!mounted) return;
       Navigator.of(context).pop();
       showSnack(
           context,
           '${widget.learner.fullName} marked as '
-          '${type.stateLabel.toLowerCase()} — parents notified.');
+          '${type.stateLabel.toLowerCase()} — $notified parent(s) emailed.');
     } catch (e) {
       if (mounted) showSnack(context, 'Could not record scan: $e');
     } finally {

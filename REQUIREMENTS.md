@@ -4,7 +4,8 @@
 **teachers, parents and school admin**.
 
 **Stack:** Flutter (Web, Android, iOS) · Firebase Phone Auth · Cloud Firestore ·
-Cloud Storage · Cloud Functions (SMTP email via nodemailer).
+Cloud Storage. **No server component** — SMTP email is sent directly from the
+app using school-configured settings.
 
 ---
 
@@ -66,14 +67,49 @@ Cloud Storage · Cloud Functions (SMTP email via nodemailer).
   parent.
 
 ### Email notifications — SMTP (FR-15)
-- **FR-15** A Cloud Functions **SMTP component** (nodemailer; host / port /
-  username / from as params, password as a secret) sends email to parents:
+- **FR-15** The **school admin configures the school's SMTP details in-app**
+  (host, port, username, password, from name/address; with save-and-test).
+  All email is sent **directly from the app** over SMTP — no Cloud
+  Functions:
   - on every application status change (received, under review, accepted,
     rejected with reason, enrolled);
-  - on payment approval/rejection;
-  - for admin-composed notices (queued from the app).
-  All mail flows through a `mailQueue` collection with a per-message outcome
-  (`sent`/`error`) for auditing.
+  - on payment approval/rejection and admin-recorded fee receipts;
+  - on every QR attendance scan;
+  - for broadcast messages.
+  Every message is logged to `mailQueue` (`sent`/`pending`/`error`).
+  Browsers cannot open SMTP sockets, so web-triggered email queues in the
+  outbox and is auto-delivered by the next staff mobile/desktop session.
+
+### Broadcast messages (FR-23…FR-25)
+- **FR-23** Admin composes broadcasts with an **HTML message editor**
+  (formatting toolbar + live preview).
+- **FR-24** Destination is **per learner** (their parents), **per class**
+  (parents of the class's learners) or **per school** (all parents).
+- **FR-25** Sending stores the broadcast as an **in-app notification** — a
+  bell badge in the app bar and an announcements feed for each recipient —
+  and **emails** every targeted parent over SMTP.
+
+### School calendar (FR-26…FR-28)
+- **FR-26** A month-view **calendar** available to every role.
+- **FR-27** Events target the **whole school**, **a class**, or **all
+  parents**; each viewer sees only what applies to them (parents also see
+  their children's class events; teachers their own classes).
+- **FR-28** Admin adds events for any audience; a **teacher** adds events
+  for classes they teach. Creators (and admin) can delete events.
+
+### Fees (FR-29…FR-32)
+- **FR-29** Admin **configures fee structures**: name, grade (or all
+  grades), year, amount, optional due date.
+- **FR-30** An **Outstanding** view lists active learners whose approved
+  fee payments fall short of their applicable structures, with per-learner
+  due/paid/outstanding amounts and a school total.
+- **FR-31** Admin **records payments** received at the office (pre-approved,
+  optionally linked to a fee structure, with an optional emailed receipt).
+- **FR-32** Admin **bulk-uploads learner payments** via a downloadable **CSV
+  template** (pre-filled with each learner's id/name/grade/class). Uploads
+  are parsed and **staged** (`paymentImports`) with per-row validation;
+  payment records are only created when the admin **approves** the batch
+  (discard is also available).
 
 ### QR attendance (FR-19…FR-22)
 - **FR-19** Every learner has a **QR code** (encoding their learner id).
@@ -133,7 +169,16 @@ chats/{id}             type (staff|parentTeacher), participantUids[],
 chats/{id}/messages/{id}  senderUid, senderName, text, createdAt
 attendance/{id}        learnerId, learnerName, className, type (checkIn|checkOut),
                        byUid, byName, parentUids[], at
-mailQueue/{id}         to, subject, text, status (pending|sent|error), sentAt
+settings/smtp          host, port, username, password, fromName, fromAddress
+broadcasts/{id}        subject, html, scope (school|schoolClass|learner),
+                       classId/Name, learnerId/Name, recipientUids[],
+                       emailsSent/Failed, sentByName, createdAt
+events/{id}            title, description, start, end, audience
+                       (school|schoolClass|parents), classId/Name, createdBy*
+feeStructures/{id}     name, grade|All grades, year, amountCents, dueDate
+paymentImports/{id}    filename, rows[{learnerId, amountCents, date, …, error}],
+                       status (staged|approved|discarded), createdByName
+mailQueue/{id}         to, subject, text, html, status (pending|sent|error), sentAt
 ```
 
 Storage: `applications/{uid}/{applicationId}/…`, `paymentProofs/{uid}/…`,
@@ -144,7 +189,8 @@ Storage: `applications/{uid}/{applicationId}/…`, `paymentProofs/{uid}/…`,
 - Attendance registers, homework, report cards and timetables.
 - Card/EFT gateway payments (payments are proof-of-payment based); invoicing
   and fee statements.
-- Push notifications (email only for now) and chat unread badges.
+- True push notifications (FCM) — they require a server; broadcast
+  notifications are in-app (bell + feed) plus email. Chat unread badges.
 - Multi-school tenancy — the deployment serves one school per Firebase project.
 - Bulk import of learners/parents (CSV) for migration.
 - Localisation — the UI is English-only in this iteration.

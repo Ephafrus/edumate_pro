@@ -6,6 +6,7 @@ import '../../core/responsive.dart';
 import '../../models/application.dart';
 import '../../models/enums.dart';
 import '../../services/firestore_service.dart';
+import '../../services/mail_service.dart';
 import '../../state/auth_controller.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/common.dart';
@@ -22,6 +23,7 @@ class AdminApplicationDetailScreen extends StatelessWidget {
   Future<void> _setStatus(BuildContext context, EnrollmentApplication app,
       ApplicationStatus status) async {
     final db = context.read<FirestoreService>();
+    final mail = context.read<MailService>();
     final byName = context.read<AuthController>().appUser?.fullName ?? '';
 
     String note = '';
@@ -45,10 +47,24 @@ class AdminApplicationDetailScreen extends StatelessWidget {
     } else {
       await db.setApplicationStatus(app, status, note: note, byName: byName);
     }
+
+    // Notify the guardian over the school's SMTP.
+    final updated = await db.watchApplication(app.id).first;
+    var mailNote = '';
+    if (updated != null) {
+      final email = MailService.applicationEmail(updated);
+      if (email != null && updated.guardianEmail.isNotEmpty) {
+        final outcome = await mail.send(
+          to: updated.guardianEmail,
+          subject: email.subject,
+          text: email.text,
+        );
+        mailNote = ' — ${outcome.label}';
+      }
+    }
     if (context.mounted) {
-      showSnack(context,
-          'Marked as ${status.label.toLowerCase()} — the guardian will be '
-          'emailed.');
+      showSnack(
+          context, 'Marked as ${status.label.toLowerCase()}$mailNote.');
     }
   }
 

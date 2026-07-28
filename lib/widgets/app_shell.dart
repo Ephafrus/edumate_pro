@@ -3,8 +3,11 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../core/responsive.dart';
+import '../models/app_user.dart';
+import '../models/broadcast.dart';
 import '../models/enums.dart';
 import '../router/app_router.dart';
+import '../services/firestore_service.dart';
 import '../state/auth_controller.dart';
 
 class NavItem {
@@ -48,6 +51,7 @@ class AppShell extends StatelessWidget {
           NavItem('Home', Routes.parentHome),
           NavItem('Apply', Routes.apply),
           NavItem('Payments', Routes.parentPayments),
+          NavItem('Calendar', Routes.calendar),
           NavItem('Messages', Routes.chats),
           NavItem('My profile', Routes.profile),
         ];
@@ -55,18 +59,20 @@ class AppShell extends StatelessWidget {
         return const [
           NavItem('My classes', Routes.teacherHome),
           NavItem('Scan', Routes.scan),
+          NavItem('Calendar', Routes.calendar),
           NavItem('Messages', Routes.chats),
           NavItem('My profile', Routes.profile),
         ];
       case UserRole.admin:
+        // The rest of the admin area (classes, staff, broadcasts, calendar,
+        // email settings, chat requests) is reached from dashboard tiles.
         return const [
           NavItem('Dashboard', Routes.adminHome),
           NavItem('Scan', Routes.scan),
           NavItem('Applications', Routes.adminApplications),
           NavItem('Learners', Routes.adminLearners),
-          NavItem('Classes', Routes.adminClasses),
-          NavItem('Staff', Routes.adminStaff),
           NavItem('Payments', Routes.adminPayments),
+          NavItem('Fees', Routes.adminFees),
           NavItem('Messages', Routes.chats),
         ];
       case null:
@@ -104,6 +110,8 @@ class AppShell extends StatelessWidget {
                   onPressed: () => context.go(it.route),
                   child: Text(it.label),
                 )),
+          if (auth.isAuthenticated && auth.appUser != null)
+            _AnnouncementsBell(user: auth.appUser!),
           IconButton(
             tooltip: 'Appearance',
             icon: const Icon(Icons.palette_outlined),
@@ -138,6 +146,38 @@ class AppShell extends StatelessWidget {
           const _Footer(),
         ],
       ),
+    );
+  }
+}
+
+/// In-app broadcast notification bell: lights up with the number of
+/// announcements newer than the user's last visit to the feed.
+class _AnnouncementsBell extends StatelessWidget {
+  const _AnnouncementsBell({required this.user});
+  final AppUser user;
+
+  @override
+  Widget build(BuildContext context) {
+    final db = context.read<FirestoreService>();
+    return StreamBuilder<List<Broadcast>>(
+      stream: db.watchBroadcastsForUser(user.uid, limit: 20),
+      builder: (context, snap) {
+        final seen = user.broadcastsSeenAt ?? DateTime(2000);
+        final unread = (snap.data ?? [])
+            .where((b) => (b.createdAt ?? DateTime(2000)).isAfter(seen))
+            .length;
+        final button = IconButton(
+          tooltip: 'Announcements',
+          icon: const Icon(Icons.notifications_outlined),
+          onPressed: () => context.go(Routes.announcements),
+        );
+        if (unread == 0) return button;
+        return Badge.count(
+          count: unread,
+          offset: const Offset(-6, 6),
+          child: button,
+        );
+      },
     );
   }
 }

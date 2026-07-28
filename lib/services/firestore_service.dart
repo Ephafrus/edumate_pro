@@ -4,8 +4,12 @@ import '../core/constants.dart';
 import '../models/app_user.dart';
 import '../models/application.dart';
 import '../models/attendance.dart';
+import '../models/broadcast.dart';
+import '../models/calendar_event.dart';
 import '../models/chat.dart';
 import '../models/enums.dart';
+import '../models/fees.dart';
+import '../models/mail_settings.dart';
 import '../models/payment.dart';
 import '../models/school.dart';
 
@@ -448,21 +452,202 @@ class FirestoreService {
     });
   }
 
-  // ---- Outgoing email ------------------------------------------------------
+  // ---- SMTP settings & outgoing email -------------------------------------
 
-  /// Queues an email; the SMTP Cloud Function picks it up and sends it.
-  /// Used for admin-composed notices — automatic notifications (application
-  /// status, payment review) are queued server-side by Firestore triggers.
-  Future<void> enqueueMail({
+  MailSettings? _cachedMailSettings;
+
+  /// The school's SMTP settings (settings/smtp), cached per session.
+  Future<MailSettings?> getMailSettings({bool refresh = false}) async {
+    if (!refresh && _cachedMailSettings != null) return _cachedMailSettings;
+    final doc =
+        await _db.collection(Collections.settings).doc('smtp').get();
+    _cachedMailSettings = doc.exists ? MailSettings.fromDoc(doc) : null;
+    return _cachedMailSettings;
+  }
+
+  Future<void> setMailSettings(MailSettings settings) async {
+    await _db
+        .collection(Collections.settings)
+        .doc('smtp')
+        .set(settings.toMap(), SetOptions(merge: true));
+    _cachedMailSettings = settings;
+  }
+
+  /// Records an outgoing email in the audit trail / outbox.
+  Future<void> logMail({
     required String to,
     required String subject,
     required String text,
+    String? html,
+    required String status,
+    String error = '',
   }) =>
       _db.collection(Collections.mailQueue).add({
         'to': to,
         'subject': subject,
         'text': text,
-        'status': 'pending',
+        'html': html,
+        'status': status,
+        'error': error,
         'createdAt': FieldValue.serverTimestamp(),
       });
+
+  /// Outbox messages still to be sent (queued from web / before SMTP was
+  /// configured / failed attempts).
+  Future<List<QueuedMail>> getUnsentMail({int limit = 25}) async {
+    final snap = await _db
+        .collection(Collections.mailQueue)
+        .where('status', whereIn: ['pending', 'error'])
+        .limit(limit)
+        .get();
+    return snap.docs.map(QueuedMail.fromDoc).toList();
+  }
+
+  Future<void> markMail(String id, String status, {String error = ''}) =>
+      _db.collection(Collections.mailQueue).doc(id).update({
+        'status': status,
+        'error': error,
+        if (status == 'sent') 'sentAt': FieldValue.serverTimestamp(),
+      });
+
+  /// Live count of unsent outbox messages, for the Email settings screen.
+  Stream<int> watchOutboxCount() => _db
+      .collection(Collections.mailQueue)
+      .where('status', whereIn: ['pending', 'error'])
+      .snapshots()
+      .map((s) => s.docs.length);
+
+  // ---- Broadcast messages --------------------------------------------------
+
+  Future<String> createBroadcast(Broadcast b) async {
+    final ref = await _db.collection(Collections.broadcasts).add(b.toMap());
+    return ref.id;
+  }
+
+  Future<void> updateBroadcast(String id, Map<String, dynamic> data) =>
+      _db.collection(Collections.broadcasts).doc(id).update(data);
+
+  /// All broadcasts, newest first (admin history).
+  Stream<List<Broadcast>> watchBroadcasts() => _db
+      .collection(Collections.broadcasts)
+      .orderBy('createdAt', descending: true)
+      .limit(100)
+      .snapshots()
+      .map((s) => s.docs.map(Broadcast.fromDoc).toList());
+
+  /// Broadcasts addressed to this parent, newest first (announcements feed
+  /// + the notification bell).
+  Stream<List<Broadcast>> watchBroadcastsForUser(String uid,
+          {int limit = 50}) =>
+      _db
+          .collection(Collections.broadcasts)
+          .where('recipientUids', arrayContains: uid)
+          .orderBy('createdAt', descending: true)
+          .limit(limit)
+          .snapshots()
+          .map((s) => s.docs.map(Broadcast.fromDoc).toList());
+
+  /// Marks the user's announcements as seen (clears the bell badge).
+  Future<void> markBroadcastsSeen(String uid) =>
+      updateUser(uid, {'broadcastsSeenAt': FieldValue.serverTimestamp()});
+
+  // ---- Calendar events -----------------------------------------------------
+
+  Stream<List<CalendarEvent>> watchEvents() => _db
+      .collection(Collections.events)
+      .orderBy('start')
+      .snapshots()
+      .map((s) => s.docs.map(CalendarEvent.fromDoc).toList());
+
+  Future<void> createEvent(CalendarEvent e) =>
+      _db.collection(Collections.events).add(e.toMap()).then((_) {});
+
+  Future<void> deleteEvent(String id) =>
+      _db.collection(Collections.events).doc(id).delete();
+
+  // ---- Fees ----------------------------------------------------------------
+
+  Stream<List<FeeStructure>> watchFeeStructures() =>
+      _db.collection(Collections.feeStructures).snapshots().map(
+            (s) => s.docs.map(FeeStructure.fromDoc).toList()
+              ..sort((a, b) => a.name.compareTo(b.name)),
+          );
+
+  Future<void> createFeeStructure(FeeStructure f) =>
+      _db.collection(Collections.feeStructures).add(f.toMap()).then((_) {});
+
+  Future<void> updateFeeStructure(String id, Map<String, dynamic> data) =>
+      _db.collection(Collections.feeStructures).doc(id).update(data);
+
+  Future<void> deleteFeeStructure(String id) =>
+      _db.collection(Collections.feeStructures).doc(id).delete();
+
+  /// Admin records a fee payment at the office — created pre-approved.
+  Future<void> recordAdminPayment(PaymentRecord p) => createPayment(p);
+
+  // ---- Bulk payment imports (staged CSV uploads) ---------------------------
+
+  Future<String> createPaymentImport(PaymentImport imp) async {
+    final ref =
+        await _db.collection(Collections.paymentImports).add(imp.toMap());
+    return ref.id;
+  }
+
+  Stream<List<PaymentImport>> watchPaymentImports() => _db
+      .collection(Collections.paymentImports)
+      .orderBy('createdAt', descending: true)
+      .limit(50)
+      .snapshots()
+      .map((s) => s.docs.map(PaymentImport.fromDoc).toList());
+
+  Future<void> discardPaymentImport(String id) =>
+      _db.collection(Collections.paymentImports).doc(id).update({
+        'status': ImportStatus.discarded.name,
+        'resolvedAt': FieldValue.serverTimestamp(),
+      });
+
+  /// Approves a staged import: creates an approved payment record for every
+  /// valid row (batched), then marks the import approved. Returns the number
+  /// of payments created.
+  Future<int> approvePaymentImport(
+    PaymentImport imp, {
+    required String byName,
+    required Map<String, Learner> learnersById,
+  }) async {
+    final valid = imp.rows.where((r) => r.valid).toList();
+    var created = 0;
+    // Firestore batches cap at 500 writes; keep headroom.
+    for (var i = 0; i < valid.length; i += 400) {
+      final batch = _db.batch();
+      for (final row in valid.skip(i).take(400)) {
+        final learner = learnersById[row.learnerId];
+        final ref = _db.collection(Collections.payments).doc();
+        batch.set(
+            ref,
+            PaymentRecord(
+              id: ref.id,
+              parentUid: learner?.parentUids.firstOrNull ?? '',
+              learnerId: row.learnerId,
+              learnerName: row.learnerName,
+              purpose: row.purpose,
+              method: row.method,
+              amountCents: row.amountCents,
+              reference: row.reference,
+              paymentDate: row.date,
+              notes: 'Bulk import: ${imp.filename}',
+              status: PaymentStatus.approved,
+              reviewedByName: byName,
+              reviewedAt: DateTime.now(),
+              source: 'import',
+            ).toMap());
+        created++;
+      }
+      await batch.commit();
+    }
+    await _db.collection(Collections.paymentImports).doc(imp.id).update({
+      'status': ImportStatus.approved.name,
+      'resolvedAt': FieldValue.serverTimestamp(),
+    });
+    return created;
+  }
 }

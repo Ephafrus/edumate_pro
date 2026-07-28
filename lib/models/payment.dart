@@ -24,6 +24,8 @@ class PaymentRecord {
     this.reviewNote = '',
     this.reviewedByName = '',
     this.reviewedAt,
+    this.source = 'parent',
+    this.feeStructureId,
     this.createdAt,
   });
 
@@ -55,6 +57,14 @@ class PaymentRecord {
   final String reviewNote;
   final String reviewedByName;
   final DateTime? reviewedAt;
+
+  /// Where the record came from: 'parent' (submitted with proof), 'admin'
+  /// (recorded at the office) or 'import' (approved bulk CSV upload).
+  final String source;
+
+  /// The fee structure this payment settles, when known — used by the
+  /// outstanding-fees view.
+  final String? feeStructureId;
   final DateTime? createdAt;
 
   double get amountRand => amountCents / 100.0;
@@ -79,6 +89,8 @@ class PaymentRecord {
         'reviewedByName': reviewedByName,
         'reviewedAt':
             reviewedAt != null ? Timestamp.fromDate(reviewedAt!) : null,
+        'source': source,
+        'feeStructureId': feeStructureId,
         'createdAt': createdAt != null
             ? Timestamp.fromDate(createdAt!)
             : FieldValue.serverTimestamp(),
@@ -104,6 +116,8 @@ class PaymentRecord {
       reviewNote: (m['reviewNote'] ?? '') as String,
       reviewedByName: (m['reviewedByName'] ?? '') as String,
       reviewedAt: (m['reviewedAt'] as Timestamp?)?.toDate(),
+      source: (m['source'] ?? 'parent') as String,
+      feeStructureId: m['feeStructureId'] as String?,
       createdAt: (m['createdAt'] as Timestamp?)?.toDate(),
     );
   }

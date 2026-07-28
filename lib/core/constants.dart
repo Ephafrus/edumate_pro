@@ -10,6 +10,11 @@ class Collections {
   static const chats = 'chats';
   static const attendance = 'attendance';
   static const mailQueue = 'mailQueue';
+  static const settings = 'settings';
+  static const broadcasts = 'broadcasts';
+  static const events = 'events';
+  static const feeStructures = 'feeStructures';
+  static const paymentImports = 'paymentImports';
   static const activity = 'activity';
 }
 

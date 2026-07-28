@@ -21,7 +21,10 @@ staff chat in-app, and parents can request a teacher chat that admin approves.
 | **Admin management** | Add **teachers** (phone-number invites), add/edit **learners**, create **classes**, **assign learners to classes**, **link learners to parents** |
 | **Payments** | Parents complete a **payment form** (purpose, method, amount, date, reference) and upload **proof of payment**; admin **approves/rejects** with a note |
 | **QR attendance** | Every learner has a **QR code** (parents show it from their dashboard; admin can display/print it). **Teachers and all school staff scan it** — the child's details pop up and they mark **in school (present)** at drop-off or **left school** at pick-up. Each scan is recorded with who/when, the child's live in/out status shows on the parent dashboard, and **parents are emailed on every drop-off and departure**. A name search fallback covers forgotten cards or browsers without a camera |
-| **Email notifications (SMTP)** | Cloud Functions + **nodemailer** send email to parents on every application status change, payment review **and attendance scan**, via a `mailQueue` collection with an audit trail |
+| **Email notifications (SMTP, no server)** | The **school admin captures the school's SMTP details in-app** (Email settings). All notification email — application status changes, payment reviews, attendance scans, fee receipts and broadcasts — is **sent directly from the app** over SMTP. Every message is logged to a `mailQueue` audit trail; messages composed on web (browsers can't open SMTP sockets) queue in an outbox and auto-send from any staff member's mobile/desktop session |
+| **Broadcast messages** | Admin composes **HTML messages** (toolbar editor + live preview) targeted **per learner, per class or per school**. Recipients get an **in-app notification** (bell badge + announcements feed) and the message is **emailed** to every targeted parent |
+| **School calendar** | Calendar (month view) with events for the **whole school, a class or all parents**. Admin adds any event; teachers add events for their own classes; parents see school/parent events plus their children's class events |
+| **Fees** | Admin **configures fee structures** (per grade/year), sees **learners with outstanding fees**, **records office payments** (with optional emailed receipt), and **bulk-uploads learner payments** from a downloadable **CSV template** — uploads are **staged first** and only create payment records after review & approval |
 | **In-app chat** | **Staff ↔ staff** chat works immediately. **Parents request a chat with a teacher**; the request (with reason + learner) goes to admin, and messaging unlocks only once **admin approves** |
 | **Teacher flow** | My classes → class register of assigned learners; staff chat |
 | **Theming** | User-configurable palette + light/dark, persisted locally |
@@ -38,7 +41,6 @@ lib/
   router/       go_router config + role-based redirect guards
   widgets/      responsive AppShell, phone auth form, upload button, shared UI
   screens/      common · auth · parent · teacher · admin · chat
-functions/      Cloud Functions — SMTP email notifications (nodemailer)
 firestore.rules / storage.rules   security rules
 ```
 
@@ -103,36 +105,23 @@ setting, not an app bug:
 The app surfaces the region error with a clear message pointing here, so if OTP
 isn't arriving, start with steps 1–2 above.
 
-## SMTP email notifications (Cloud Functions)
+## SMTP email notifications (no server needed)
 
-Parent notifications (application status changes, payment approvals, admin
-notices) are sent **over SMTP** by Cloud Functions in
-[`functions/`](functions), so SMTP credentials never ship in the app:
+There are **no Cloud Functions** — the school admin sets the SMTP details up
+inside the app: **Dashboard → Email settings** (host, port, username,
+password/app password, from name & address), then *Save & send test*. Any SMTP
+provider works (the school's mail host, Gmail/Workspace with an app password,
+SendGrid SMTP, Mailgun, …). Port 465 is used as SMTPS; 587 as STARTTLS.
 
-```bash
-cd functions && npm install && cd ..
+Email is then sent **directly from the app** wherever it's triggered:
+application status changes, payment reviews, fee receipts, attendance scans
+and broadcasts. Every message is logged to the `mailQueue` collection
+(`sent` / `pending` / `error`) as an audit trail.
 
-# SMTP password is a secret:
-firebase functions:secrets:set SMTP_PASSWORD
-
-# Host/port/username/from are params — you're prompted on first deploy and the
-# values are saved to functions/.env, e.g.:
-#   SMTP_HOST=smtp.yourprovider.com
-#   SMTP_PORT=587
-#   SMTP_USERNAME=no-reply@yourschool.co.za
-#   SMTP_FROM="EduMate Pro <no-reply@yourschool.co.za>"
-firebase deploy --only functions
-```
-
-Any SMTP provider works (your school's mail host, SendGrid SMTP, Gmail/Workspace
-with an app password, Mailgun, …). Port 465 is treated as SMTPS; 587 uses
-STARTTLS.
-
-**How it works:** every email is a doc in the `mailQueue` collection
-(`{to, subject, text}`); the `processMailQueue` function sends it and stamps
-the outcome (`sent` / `error`) on the doc, giving you an audit trail in
-Firestore. The `onApplicationStatusChange` and `onPaymentReviewed` triggers
-queue the parent-facing emails automatically.
+**Web note:** browsers cannot open SMTP connections, so email triggered from
+the web app is queued in the outbox and delivered automatically the next time
+any staff member opens the app on Android/iOS/desktop (or taps *Send outbox
+now* under Email settings).
 
 > The app runs with the placeholder config but shows a "Firebase is not
 > configured" screen until setup step 4 is done.
@@ -167,7 +156,7 @@ firebase use --add            # pick your project
 flutter build web --release
 firebase deploy --only hosting
 # …or everything together:
-firebase deploy --only hosting,firestore,storage,functions
+firebase deploy --only hosting,firestore,storage
 ```
 
 The site goes live at `https://<project-id>.web.app`. **After deploying:** add
@@ -199,10 +188,18 @@ flutter test
    any staff member scans it (`Scan` in the nav), checks the details, and
    marks *in school* or *left school* → the event is logged and every linked
    parent is emailed immediately.
+5. **Broadcasts:** admin → Broadcasts → *New broadcast* → pick the
+   destination (learner / class / school), write the HTML message, send →
+   parents' bells light up in-app and the message lands in their inbox.
+6. **Fees:** admin → Fees → configure structures → *Outstanding* shows who
+   still owes → record office payments directly, or *Download template CSV*,
+   fill in the amounts, upload → review the staged rows → approve to create
+   the payment records.
 
 ## Known gaps / next steps
 
-Tracked in [`REQUIREMENTS.md`](REQUIREMENTS.md). Highlights: attendance and
-report cards are out of scope for this iteration; payments are proof-of-payment
-based (no card gateway); notifications are email-only (no push yet); and chat
-has no unread badges/typing indicators.
+Tracked in [`REQUIREMENTS.md`](REQUIREMENTS.md). Highlights: report cards and
+homework are out of scope for this iteration; payments are proof-of-payment
+based (no card gateway); broadcast notifications are in-app + email (true FCM
+push needs a server component, which this serverless design deliberately
+avoids); and chat has no unread badges/typing indicators.

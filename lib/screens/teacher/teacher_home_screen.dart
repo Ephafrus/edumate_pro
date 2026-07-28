@@ -6,6 +6,7 @@ import '../../core/responsive.dart';
 import '../../models/school.dart';
 import '../../router/app_router.dart';
 import '../../services/firestore_service.dart';
+import '../../services/mail_service.dart';
 import '../../state/auth_controller.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/common.dart';
@@ -22,6 +23,8 @@ class TeacherHomeScreen extends StatelessWidget {
     if (user == null) {
       return const AppShell(title: 'My classes', body: SizedBox());
     }
+    // Deliver any email queued from web sessions / SMTP hiccups.
+    context.read<MailService>().flushOutboxSoon();
 
     return AppShell(
       title: 'My classes',

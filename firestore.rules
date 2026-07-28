@@ -124,14 +124,62 @@ service cloud.firestore {
     }
 
     // ---- Payments ----------------------------------------------------------
-    // Parents submit (status pending); only admin reviews.
+    // Parents submit (status pending); admin reviews, records office
+    // payments directly and creates records from approved bulk imports.
     match /payments/{id} {
       allow read: if isAdmin()
                   || (isSignedIn() && resource.data.parentUid == request.auth.uid);
-      allow create: if isSignedIn()
-                  && request.resource.data.parentUid == request.auth.uid
-                  && request.resource.data.status == 'pending';
+      allow create: if isAdmin()
+                  || (isSignedIn()
+                      && request.resource.data.parentUid == request.auth.uid
+                      && request.resource.data.status == 'pending');
       allow update, delete: if isAdmin();
+    }
+
+    // ---- Fee structures & bulk payment imports ------------------------------
+    // Fee amounts are visible to any signed-in user; only admin configures.
+    match /feeStructures/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+    // Staged CSV uploads — admin-only workspace.
+    match /paymentImports/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    // ---- School settings (SMTP email, …) -----------------------------------
+    // Staff read (teachers' attendance scans send email too); admin writes.
+    match /settings/{doc} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+
+    // ---- Broadcast messages -------------------------------------------------
+    // Composed by admin; each recipient parent reads their own.
+    match /broadcasts/{id} {
+      allow read: if isStaff()
+                  || (isSignedIn()
+                      && request.auth.uid in resource.data.recipientUids);
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ---- Calendar events ----------------------------------------------------
+    // Everyone signed in can read (the app filters by audience). Admin
+    // manages any event; a teacher manages events for classes they teach.
+    match /events/{id} {
+      function teachesClass(classId) {
+        return classId != null
+          && get(/databases/$(database)/documents/classes/$(classId))
+              .data.teacherUid == request.auth.uid;
+      }
+      allow read: if isSignedIn();
+      allow create: if isAdmin()
+                  || (isStaff()
+                      && request.resource.data.audience == 'schoolClass'
+                      && teachesClass(request.resource.data.classId));
+      allow update, delete: if isAdmin()
+                  || (isStaff()
+                      && resource.data.createdByUid == request.auth.uid);
     }
 
     // ---- Chat --------------------------------------------------------------
@@ -176,13 +224,14 @@ service cloud.firestore {
       }
     }
 
-    // ---- Outgoing mail queue ----------------------------------------------
-    // Cloud Functions (Admin SDK) bypass rules; from the client only admins
-    // may queue custom notices, and nobody can tamper with queued mail.
+    // ---- Outgoing mail audit trail / outbox --------------------------------
+    // Email is sent from the app by staff (admin actions, teachers'
+    // attendance scans); every message is logged here, and unsent ones are
+    // retried by staff sessions.
     match /mailQueue/{id} {
-      allow read: if isAdmin();
-      allow create: if isAdmin();
-      allow update, delete: if false;
+      allow read: if isStaff();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
     }
   }
 }

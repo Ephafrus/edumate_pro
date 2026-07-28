@@ -19,6 +19,7 @@ class AppUser {
     this.address = '',
     this.profileComplete = false,
     this.active = true,
+    this.broadcastsSeenAt,
     this.createdAt,
   });
 
@@ -38,6 +39,10 @@ class AppUser {
 
   /// Admin can deactivate an account without deleting it.
   final bool active;
+
+  /// When the user last opened Announcements — newer broadcasts light up
+  /// the in-app notification bell.
+  final DateTime? broadcastsSeenAt;
   final DateTime? createdAt;
 
   bool get isAdmin => role == UserRole.admin;
@@ -63,6 +68,9 @@ class AppUser {
         'address': address,
         'profileComplete': profileComplete,
         'active': active,
+        'broadcastsSeenAt': broadcastsSeenAt != null
+            ? Timestamp.fromDate(broadcastsSeenAt!)
+            : null,
         'createdAt': createdAt != null
             ? Timestamp.fromDate(createdAt!)
             : FieldValue.serverTimestamp(),
@@ -81,6 +89,7 @@ class AppUser {
       address: (m['address'] ?? '') as String,
       profileComplete: (m['profileComplete'] ?? false) as bool,
       active: (m['active'] ?? true) as bool,
+      broadcastsSeenAt: (m['broadcastsSeenAt'] as Timestamp?)?.toDate(),
       createdAt: (m['createdAt'] as Timestamp?)?.toDate(),
     );
   }
@@ -106,6 +115,7 @@ class AppUser {
         address: address ?? this.address,
         profileComplete: profileComplete ?? this.profileComplete,
         active: active ?? this.active,
+        broadcastsSeenAt: broadcastsSeenAt,
         createdAt: createdAt,
       );
 }
