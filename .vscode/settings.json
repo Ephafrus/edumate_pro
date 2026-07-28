@@ -1,0 +1,12 @@
+{
+  "//": "Generated build output (build/) contains the Firebase plugins' own example apps and tests. analysis_options 'exclude' does not cross package boundaries (those nested pubspecs become separate analysis contexts), so exclude the whole build/ folder from the analyzer, file watcher and search here.",
+  "dart.analysisExcludedFolders": ["build"],
+  "files.watcherExclude": {
+    "**/build/**": true,
+    "**/.dart_tool/**": true
+  },
+  "search.exclude": {
+    "**/build/**": true,
+    "**/.dart_tool/**": true
+  }
+}
