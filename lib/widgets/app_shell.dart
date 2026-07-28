@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../core/responsive.dart';
+import '../core/theme.dart';
 import '../models/app_user.dart';
 import '../models/broadcast.dart';
 import '../models/enums.dart';
@@ -94,13 +95,21 @@ class AppShell extends StatelessWidget {
                 ? homeFor(auth.role, auth.needsProfile)
                 : Routes.landing,
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.school, size: 24),
-              SizedBox(width: 8),
-              Text('EduMate Pro',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  gradient: Theme.of(context).colorScheme.heroGradient,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.school,
+                    size: 18, color: Colors.white),
+              ),
+              const SizedBox(width: 8),
+              const Text('EduMate Pro',
+                  style: TextStyle(fontWeight: FontWeight.w800)),
             ],
           ),
         ),
@@ -195,28 +204,31 @@ class _NavDrawer extends StatelessWidget {
         child: ListView(
           children: [
             DrawerHeader(
+              decoration: BoxDecoration(
+                gradient: Theme.of(context).colorScheme.heroGradient,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   const Row(
                     children: [
-                      Icon(Icons.school),
+                      Icon(Icons.school, color: Colors.white),
                       SizedBox(width: 8),
                       Text('EduMate Pro',
                           style: TextStyle(
-                              fontSize: 20, fontWeight: FontWeight.bold)),
+                              fontSize: 20,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800)),
                     ],
                   ),
                   if (user != null) ...[
                     const SizedBox(height: 8),
                     Text(user.fullName,
-                        style: Theme.of(context).textTheme.bodyMedium),
+                        style: const TextStyle(color: Colors.white)),
                     Text(user.role.label,
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(color: Colors.grey)),
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 12)),
                   ],
                 ],
               ),

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'app_user.dart';
 import 'enums.dart';
 
 /// A school calendar event at `events/{id}` — added by admin (any audience)
@@ -38,6 +39,20 @@ class CalendarEvent {
   String get audienceLabel => audience == EventAudience.schoolClass
       ? (className.isEmpty ? 'A class' : className)
       : audience.label;
+
+  /// Whether [user] should see this event. [myClassIds] are the classes
+  /// relevant to them (classes they teach / their children's classes).
+  bool visibleTo(AppUser user, Set<String> myClassIds) {
+    if (user.isAdmin) return true;
+    switch (audience) {
+      case EventAudience.school:
+        return true;
+      case EventAudience.parents:
+        return user.isParent;
+      case EventAudience.schoolClass:
+        return classId != null && myClassIds.contains(classId);
+    }
+  }
 
   Map<String, dynamic> toMap() => {
         'title': title,

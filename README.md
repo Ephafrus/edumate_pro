@@ -26,8 +26,9 @@ staff chat in-app, and parents can request a teacher chat that admin approves.
 | **School calendar** | Calendar (month view) with events for the **whole school, a class or all parents**. Admin adds any event; teachers add events for their own classes; parents see school/parent events plus their children's class events |
 | **Fees** | Admin **configures fee structures** (per grade/year), sees **learners with outstanding fees**, **records office payments** (with optional emailed receipt), and **bulk-uploads learner payments** from a downloadable **CSV template** — uploads are **staged first** and only create payment records after review & approval |
 | **In-app chat** | **Staff ↔ staff** chat works immediately. **Parents request a chat with a teacher**; the request (with reason + learner) goes to admin, and messaging unlocks only once **admin approves** |
+| **Home banner** | Every signed-in user's home opens with a **colourful gradient banner**: a time-of-day greeting, their **latest messages**, and up to **3 upcoming events** (sections hide when empty) |
 | **Teacher flow** | My classes → class register of assigned learners; staff chat |
-| **Theming** | User-configurable palette + light/dark, persisted locally |
+| **Theming & customisation** | Modern, colourful Material 3 design (vibrant scheme, gradient hero surfaces, rounded components). Each user **customises their own app**: school colour palette, light/dark/system mode and text size — persisted locally |
 | **Responsive** | Adapts across mobile / tablet / desktop; inline nav on wide screens, drawer on mobile |
 
 ## Project structure

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants.dart';
 import '../../core/responsive.dart';
+import '../../core/theme.dart';
 import '../../router/app_router.dart';
 import '../../state/auth_controller.dart';
 import '../../widgets/app_shell.dart';
@@ -24,27 +25,61 @@ class LandingScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 24),
-            Text('EduMate Pro',
-                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                    fontWeight: FontWeight.bold, color: scheme.primary)),
-            const SizedBox(height: 8),
-            Text(
-              'One school management platform connecting teachers, parents '
-              'and school admin — enrollment applications, class management, '
-              'payments and in-app messaging in one place.',
-              style:
-                  Theme.of(context).textTheme.titleMedium?.copyWith(height: 1.5),
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: () => context.go(auth.isAuthenticated
-                  ? homeFor(auth.role, auth.needsProfile)
-                  : Routes.login),
-              icon: const Icon(Icons.login),
-              label: Text(auth.isAuthenticated
-                  ? 'Go to my dashboard'
-                  : 'Sign in with your phone'),
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(context.isMobile ? 24 : 40),
+              decoration: BoxDecoration(
+                gradient: scheme.heroGradient,
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(Icons.school,
+                        color: Colors.white, size: 32),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('EduMate Pro',
+                      style: Theme.of(context)
+                          .textTheme
+                          .headlineLarge
+                          ?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'One school management platform connecting teachers, '
+                    'parents and school admin — enrollment applications, '
+                    'attendance, payments, calendars and messaging in one '
+                    'place.',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(height: 1.5, color: Colors.white),
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: scheme.primary,
+                    ),
+                    onPressed: () => context.go(auth.isAuthenticated
+                        ? homeFor(auth.role, auth.needsProfile)
+                        : Routes.login),
+                    icon: const Icon(Icons.login),
+                    label: Text(auth.isAuthenticated
+                        ? 'Go to my dashboard'
+                        : 'Sign in with your phone'),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 32),
             GridView.count(

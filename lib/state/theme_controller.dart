@@ -3,8 +3,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/theme.dart';
 
-/// Holds the user-configurable look & feel (seed colour + light/dark mode) and
-/// persists it locally so it survives restarts and applies to guests too.
+/// Holds the user-configurable look & feel — seed colour, light/dark mode
+/// and text size — and persists it locally so each user's customisation
+/// survives restarts and applies to guests too.
 class ThemeController extends ChangeNotifier {
   ThemeController() {
     _load();
@@ -12,12 +13,15 @@ class ThemeController extends ChangeNotifier {
 
   static const _seedKey = 'theme_seed';
   static const _modeKey = 'theme_mode';
+  static const _scaleKey = 'theme_text_scale';
 
   Color _seed = AppTheme.defaultSeed;
   ThemeMode _mode = ThemeMode.system;
+  double _textScale = 1.0;
 
   Color get seed => _seed;
   ThemeMode get mode => _mode;
+  double get textScale => _textScale;
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -27,7 +31,16 @@ class ThemeController extends ChangeNotifier {
     if (modeIndex != null && modeIndex < ThemeMode.values.length) {
       _mode = ThemeMode.values[modeIndex];
     }
+    final scale = prefs.getDouble(_scaleKey);
+    if (scale != null && scale >= 0.7 && scale <= 1.5) _textScale = scale;
     notifyListeners();
+  }
+
+  Future<void> setTextScale(double scale) async {
+    _textScale = scale;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_scaleKey, scale);
   }
 
   Future<void> setSeed(Color color) async {

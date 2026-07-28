@@ -10,6 +10,7 @@ import '../../services/mail_service.dart';
 import '../../state/auth_controller.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/common.dart';
+import '../../widgets/home_banner.dart';
 
 /// Teacher home: the classes assigned to this teacher, plus quick links to
 /// messages.
@@ -32,12 +33,7 @@ class TeacherHomeScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Welcome, ${user.firstName.isEmpty ? 'Teacher' : user.firstName}',
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
+            const HomeBanner(),
             DashboardTile(
               icon: Icons.qr_code_scanner,
               title: 'Scan attendance QR',

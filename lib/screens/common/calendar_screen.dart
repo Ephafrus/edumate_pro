@@ -29,18 +29,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime _focused = DateTime.now();
   DateTime _selected = DateTime.now();
 
-  bool _visibleTo(CalendarEvent e, AppUser user, Set<String> myClassIds) {
-    if (user.isAdmin) return true;
-    switch (e.audience) {
-      case EventAudience.school:
-        return true;
-      case EventAudience.parents:
-        return user.isParent;
-      case EventAudience.schoolClass:
-        return e.classId != null && myClassIds.contains(e.classId);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final db = context.read<FirestoreService>();
@@ -78,7 +66,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               stream: db.watchEvents(),
               builder: (context, snap) {
                 final events = (snap.data ?? [])
-                    .where((e) => _visibleTo(e, user, myClassIds))
+                    .where((e) => e.visibleTo(user, myClassIds))
                     .toList();
                 final byDay = <DateTime, List<CalendarEvent>>{};
                 for (final e in events) {

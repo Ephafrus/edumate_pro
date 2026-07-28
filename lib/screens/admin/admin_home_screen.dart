@@ -12,9 +12,9 @@ import '../../models/school.dart';
 import '../../router/app_router.dart';
 import '../../services/firestore_service.dart';
 import '../../services/mail_service.dart';
-import '../../state/auth_controller.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/common.dart';
+import '../../widgets/home_banner.dart';
 
 /// Admin dashboard: live counts with pending-work badges linking into each
 /// management area.
@@ -24,7 +24,6 @@ class AdminHomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final db = context.read<FirestoreService>();
-    final user = context.watch<AuthController>().appUser;
     // Deliver any email queued from web sessions / SMTP hiccups.
     context.read<MailService>().flushOutboxSoon();
 
@@ -34,15 +33,7 @@ class AdminHomeScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Welcome, ${user?.firstName ?? 'Admin'}',
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            Text('Everything that needs your attention, in one place.',
-                style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 16),
+            const HomeBanner(),
             DashboardTile(
               icon: Icons.qr_code_scanner,
               title: 'Scan attendance QR',

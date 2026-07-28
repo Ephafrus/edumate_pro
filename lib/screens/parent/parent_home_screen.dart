@@ -11,6 +11,7 @@ import '../../services/firestore_service.dart';
 import '../../state/auth_controller.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/common.dart';
+import '../../widgets/home_banner.dart';
 import '../../widgets/learner_qr_dialog.dart';
 
 /// Parent dashboard: linked children, enrollment applications with live
@@ -30,12 +31,7 @@ class ParentHomeScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Welcome, ${user.firstName.isEmpty ? 'there' : user.firstName}',
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
+            const HomeBanner(),
             DashboardTile(
               icon: Icons.assignment_add,
               title: 'Apply for a child',

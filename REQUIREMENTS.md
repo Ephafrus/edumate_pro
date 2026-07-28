@@ -139,7 +139,12 @@ app using school-configured settings.
 ### General (GR-1…GR-5)
 - **GR-1** Responsive layout across mobile / tablet / desktop (inline nav vs
   drawer, adaptive grids, two-column form rows on wide screens).
-- **GR-2** User-selectable theme palette + light/dark mode, persisted locally.
+- **GR-2** Modern, colourful design (vibrant Material 3, gradient hero
+  surfaces). Users **customise their own app**: theme palette, light/dark
+  mode and text size, persisted locally.
+- **GR-6** Every signed-in home shows an **in-app banner** with a greeting,
+  the user's latest messages, and up to 3 upcoming events (hidden when
+  there are none).
 - **GR-3** Role-based routing guards: each role only reaches its own area;
   unauthenticated users only the landing/login pages.
 - **GR-4** Firestore + Storage **security rules** enforce all role boundaries

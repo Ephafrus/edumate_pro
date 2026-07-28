@@ -88,7 +88,13 @@ class _AppViewState extends State<_AppView> {
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        return child ?? const SizedBox.shrink();
+        // Apply the user's chosen text size app-wide.
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(theme.textScale),
+          ),
+          child: child ?? const SizedBox.shrink(),
+        );
       },
     );
   }

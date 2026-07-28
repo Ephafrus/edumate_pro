@@ -7,22 +7,48 @@ import '../../state/theme_controller.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/common.dart';
 
-/// Appearance settings: pick a colour palette and light/dark mode. Persisted
-/// locally so it applies before sign-in too.
+/// "Customise your app": each user picks their own colour palette,
+/// light/dark mode and text size. Persisted locally so it applies before
+/// sign-in too.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeController>();
+    final scheme = Theme.of(context).colorScheme;
 
     return AppShell(
-      title: 'Appearance',
+      title: 'Customise',
       body: ContentContainer(
         maxWidth: 560,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: scheme.heroGradient,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Customise your app',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800)),
+                  SizedBox(height: 4),
+                  Text(
+                      'Make EduMate Pro yours — pick your school colours, '
+                      'light or dark mode, and a comfortable text size.',
+                      style: TextStyle(color: Colors.white70, fontSize: 13)),
+                ],
+              ),
+            ),
             SectionCard(
               title: 'Colour palette',
               child: Wrap(
@@ -82,6 +108,22 @@ class SettingsScreen extends StatelessWidget {
                 ],
                 selected: {theme.mode},
                 onSelectionChanged: (s) => theme.setMode(s.first),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SectionCard(
+              title: 'Text size',
+              child: SegmentedButton<double>(
+                segments: AppTheme.textScales
+                    .map((o) => ButtonSegment(
+                        value: o.scale, label: Text(o.name)))
+                    .toList(),
+                selected: {
+                  AppTheme.textScales.any((o) => o.scale == theme.textScale)
+                      ? theme.textScale
+                      : 1.0
+                },
+                onSelectionChanged: (s) => theme.setTextScale(s.first),
               ),
             ),
           ],
