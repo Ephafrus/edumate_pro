@@ -245,3 +245,48 @@ class DashboardTile extends StatelessWidget {
     );
   }
 }
+
+/// A grid of cards whose **row height is set explicitly** rather than derived
+/// from an aspect ratio.
+///
+/// `childAspectRatio` ties a cell's height to the viewport width, so the same
+/// card that fits on a wide window gets squeezed on a narrow one and its
+/// content overflows the bottom. Users can also change the app's text size,
+/// which no ratio can anticipate. Giving the row a real height — scaled with
+/// the reader's text size, and capped so it cannot run away — keeps the
+/// content inside the card at every width.
+class CardGrid extends StatelessWidget {
+  const CardGrid({
+    super.key,
+    required this.columns,
+    required this.rowHeight,
+    required this.children,
+    this.spacing = 12,
+  });
+
+  final int columns;
+
+  /// Height of one row at the default text size.
+  final double rowHeight;
+  final double spacing;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    // Grow with the reader's text size, but stop well short of a card so tall
+    // it stops looking like a card.
+    final scale =
+        MediaQuery.textScalerOf(context).scale(1.0).clamp(1.0, 1.8);
+    return GridView(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: columns,
+        mainAxisSpacing: spacing,
+        crossAxisSpacing: spacing,
+        mainAxisExtent: rowHeight * scale,
+      ),
+      children: children,
+    );
+  }
+}

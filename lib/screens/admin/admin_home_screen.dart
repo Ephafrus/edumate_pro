@@ -103,13 +103,9 @@ class _StatGrid extends StatelessWidget {
                       Icons.badge_outlined, Colors.deepPurple,
                       route: Routes.adminUsers),
                 ];
-                return GridView.count(
-                  crossAxisCount: columns,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 1.7,
+                return CardGrid(
+                  columns: columns,
+                  rowHeight: 116,
                   children: stats.map((s) => _StatCard(stat: s)).toList(),
                 );
               },
@@ -142,10 +138,11 @@ class _StatCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         onTap: () => context.go(stat.route),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
@@ -155,17 +152,28 @@ class _StatCard extends StatelessWidget {
                 ),
                 child: Icon(stat.icon, size: 18, color: stat.colour),
               ),
-              const SizedBox(height: 10),
-              Text(stat.value,
-                  style: const TextStyle(
-                      fontSize: 26, fontWeight: FontWeight.w800)),
-              Text(stat.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: Colors.grey)),
+              const SizedBox(height: 8),
+              // The number is the one thing that must never be cut off, and
+              // it is also the largest — let it shrink rather than overflow.
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(stat.value,
+                      maxLines: 1,
+                      style: const TextStyle(
+                          fontSize: 26, fontWeight: FontWeight.w800)),
+                ),
+              ),
+              Flexible(
+                child: Text(stat.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: Colors.grey)),
+              ),
             ],
           ),
         ),

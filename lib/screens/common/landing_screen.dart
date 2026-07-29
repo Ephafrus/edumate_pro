@@ -8,6 +8,7 @@ import '../../core/theme.dart';
 import '../../router/app_router.dart';
 import '../../state/auth_controller.dart';
 import '../../widgets/app_shell.dart';
+import '../../widgets/common.dart';
 
 /// Public landing page: what EduMate Pro is, and a sign-in call to action.
 class LandingScreen extends StatelessWidget {
@@ -82,13 +83,9 @@ class LandingScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 32),
-            GridView.count(
-              crossAxisCount: context.gridColumns,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: context.isMobile ? 2.6 : 1.6,
+            CardGrid(
+              columns: context.gridColumns,
+              rowHeight: context.isMobile ? 132 : 172,
               children: const [
                 _FeatureCard(
                   icon: Icons.assignment_outlined,
