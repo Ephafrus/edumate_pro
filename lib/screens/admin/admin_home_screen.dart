@@ -105,7 +105,11 @@ class _StatGrid extends StatelessWidget {
                 ];
                 return CardGrid(
                   columns: columns,
-                  rowHeight: 116,
+                  // Measured, not guessed: the card's own content comes to
+                  // 135px at the default text size (icon chip, 26px number,
+                  // label, 14px padding). Anything less and the number is
+                  // quietly shrunk to fit instead of being shown at size.
+                  rowHeight: 140,
                   children: stats.map((s) => _StatCard(stat: s)).toList(),
                 );
               },

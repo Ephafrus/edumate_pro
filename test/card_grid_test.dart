@@ -43,10 +43,13 @@ Widget _statCard({bool resilient = true}) => Card(
               const Text('1234',
                   style:
                       TextStyle(fontSize: 26, fontWeight: FontWeight.w800)),
-            const Flexible(
-              child: Text('Learners enrolled',
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
-            ),
+            if (resilient)
+              const Flexible(
+                child: Text('Learners enrolled',
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+              )
+            else
+              const Text('Learners enrolled', maxLines: 1),
           ],
         ),
       ),
@@ -58,6 +61,8 @@ Future<void> _pumpGrid(
   required double textScale,
   required int columns,
   bool resilient = true,
+  double rowHeight = 140,
+  double sidebar = 0,
 }) async {
   await tester.binding.setSurfaceSize(surface);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -69,13 +74,20 @@ Future<void> _pumpGrid(
         textScaler: TextScaler.linear(textScale),
       ),
       child: Scaffold(
-        body: SingleChildScrollView(
+        body: Padding(
+          // The admin overview sits beside a fixed-width sidebar, so the
+          // grid never gets the whole window. Leaving that out is what let
+          // an earlier version of this test pass while the real screen
+          // overflowed.
+          padding: EdgeInsets.only(left: sidebar),
+          child: SingleChildScrollView(
           child: CardGrid(
             columns: columns,
-            rowHeight: 116,
+            rowHeight: rowHeight,
             children: List.generate(
                 4, (_) => _statCard(resilient: resilient)),
           ),
+        ),
         ),
       ),
     ),
@@ -84,6 +96,32 @@ Future<void> _pumpGrid(
 }
 
 void main() {
+  // The exact reported geometry: a 1100px window with the 248px sidebar,
+  // four columns, and a card that does not shrink to fit. The cell lands at
+  // ~186px wide, where the card's content needs 135px of height.
+  testWidgets('a rigid card fits beside the sidebar', (tester) async {
+    await _pumpGrid(tester,
+        surface: const Size(1100, 800),
+        textScale: 1.0,
+        columns: 4,
+        sidebar: 248,
+        resilient: false);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the row is tall enough for the card to render at full size',
+      (tester) async {
+    await _pumpGrid(tester,
+        surface: const Size(1100, 800),
+        textScale: 1.0,
+        columns: 4,
+        sidebar: 248,
+        resilient: false);
+    // 135px of content: a shorter row would shrink the number instead.
+    expect(tester.getSize(find.byType(Card).first).height,
+        greaterThanOrEqualTo(135));
+  });
+
   // The reported failure: a narrow desktop window, four columns, a card
   // that does not shrink to fit. A real row height has to be enough on its
   // own — the card's own resilience is a second line of defence, not the
@@ -155,6 +193,6 @@ void main() {
 
     expect(large, greaterThan(normal));
     // Clamped, so a card never turns into a page.
-    expect(huge, lessThanOrEqualTo(116 * 1.8 + 0.01));
+    expect(huge, lessThanOrEqualTo(140 * 1.8 + 0.01));
   });
 }
