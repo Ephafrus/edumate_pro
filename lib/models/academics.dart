@@ -12,6 +12,7 @@ class Subject {
     this.className = '',
     this.teacherUid,
     this.teacherName = '',
+    this.teacherInviteId,
     this.createdAt,
   });
 
@@ -23,7 +24,14 @@ class Subject {
   final String className;
   final String? teacherUid;
   final String teacherName;
+
+  /// Set instead of [teacherUid] when the subject teacher was picked from a
+  /// staff invite that has not been claimed yet; resolved to a real uid on
+  /// that person's first sign-in.
+  final String? teacherInviteId;
   final DateTime? createdAt;
+
+  bool get teacherPending => teacherUid == null && teacherInviteId != null;
 
   Map<String, dynamic> toMap() => {
         'name': name,
@@ -31,6 +39,7 @@ class Subject {
         'className': className,
         'teacherUid': teacherUid,
         'teacherName': teacherName,
+        'teacherInviteId': teacherInviteId,
         'createdAt': createdAt != null
             ? Timestamp.fromDate(createdAt!)
             : FieldValue.serverTimestamp(),
@@ -45,6 +54,7 @@ class Subject {
       className: (m['className'] ?? '') as String,
       teacherUid: m['teacherUid'] as String?,
       teacherName: (m['teacherName'] ?? '') as String,
+      teacherInviteId: m['teacherInviteId'] as String?,
       createdAt: (m['createdAt'] as Timestamp?)?.toDate(),
     );
   }

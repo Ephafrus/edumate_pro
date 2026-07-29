@@ -134,6 +134,8 @@ class AppShell extends StatelessWidget {
             section: 'People'),
         NavItem('Staff', Routes.adminStaff, Icons.badge_outlined,
             section: 'People'),
+        NavItem('Users', Routes.adminUsers, Icons.people_outline,
+            section: 'People'),
         NavItem('Progress reports', Routes.adminProgress,
             Icons.insights_outlined,
             section: 'Academics'),

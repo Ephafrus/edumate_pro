@@ -129,13 +129,29 @@ service cloud.firestore {
       }
 
       // ---- Classes & subjects ---------------------------------------------
+      // Managers own these. The one exception is completing a teaching link
+      // that was made against a staff invite: on the invitee's first sign-in
+      // the app swaps the invite id for their real uid, which they must be
+      // able to write themselves. It is allowed only on the record that
+      // carries *their* invite.
+      function claimsOwnTeachingInvite() {
+        return isSignedIn()
+               && resource.data.teacherInviteId != null
+               && request.resource.data.teacherUid == request.auth.uid
+               && request.resource.data.teacherInviteId == null
+               && exists(/databases/$(database)/documents/staffInvites/$(resource.data.teacherInviteId))
+               && get(/databases/$(database)/documents/staffInvites/$(resource.data.teacherInviteId))
+                    .data.claimedByUid == request.auth.uid;
+      }
       match /classes/{id} {
         allow read: if isMember(schoolId);
-        allow write: if isManager(schoolId);
+        allow create, delete: if isManager(schoolId);
+        allow update: if isManager(schoolId) || claimsOwnTeachingInvite();
       }
       match /subjects/{id} {
         allow read: if isMember(schoolId);
-        allow write: if isManager(schoolId);
+        allow create, delete: if isManager(schoolId);
+        allow update: if isManager(schoolId) || claimsOwnTeachingInvite();
       }
 
       // ---- Learners --------------------------------------------------------
@@ -218,6 +234,22 @@ service cloud.firestore {
                     || (isSignedIn()
                         && resource.data.parentUid == request.auth.uid
                         && resource.data.status == 'draft');
+
+        // Review notes and messages. Staff see the whole thread; the
+        // applicant only sees the entries addressed to them, which they can
+        // never write or change.
+        match /comments/{commentId} {
+          function ownsApplication() {
+            return isSignedIn()
+                   && get(/databases/$(database)/documents/schools/$(schoolId)/applications/$(id))
+                        .data.parentUid == request.auth.uid;
+          }
+          allow read: if isStaff(schoolId)
+                      || (ownsApplication() && resource.data.internal == false);
+          allow create: if isStaff(schoolId)
+                      && request.resource.data.byUid == request.auth.uid;
+          allow update, delete: if false;
+        }
       }
 
       // ---- Payments & fees ---------------------------------------------------

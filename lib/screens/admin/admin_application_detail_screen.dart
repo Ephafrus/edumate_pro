@@ -230,6 +230,8 @@ class AdminApplicationDetailScreen extends StatelessWidget {
                         ),
                 ),
                 const SizedBox(height: 12),
+                _ReviewThread(app: app),
+                const SizedBox(height: 12),
                 SectionCard(
                   title: 'History',
                   child: app.events.isEmpty
@@ -327,5 +329,257 @@ class _Actions extends StatelessWidget {
 
     if (buttons.isEmpty) return const SizedBox.shrink();
     return Wrap(spacing: 8, runSpacing: 8, children: buttons);
+  }
+}
+
+/// Notes and messages on an application.
+///
+/// An internal note stays with the review team; a message is shown to the
+/// applicant on their own application page and can be emailed to them at the
+/// same time — so a query like "we still need the birth certificate" reaches
+/// the parent without leaving the review screen.
+class _ReviewThread extends StatefulWidget {
+  const _ReviewThread({required this.app});
+  final EnrollmentApplication app;
+
+  @override
+  State<_ReviewThread> createState() => _ReviewThreadState();
+}
+
+class _ReviewThreadState extends State<_ReviewThread> {
+  final _text = TextEditingController();
+  bool _toApplicant = false;
+  bool _alsoEmail = true;
+  bool _sending = false;
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  Future<void> _post() async {
+    final text = _text.text.trim();
+    if (text.isEmpty) {
+      showSnack(context, 'Write something first');
+      return;
+    }
+    final db = context.read<FirestoreService>();
+    final mail = context.read<MailService>();
+    final activity = context.read<ActivityService>();
+    final auth = context.read<AuthController>();
+    final me = auth.appUser;
+    final app = widget.app;
+
+    final wantsEmail = _toApplicant && _alsoEmail;
+    final canEmail = wantsEmail && app.guardianEmail.isNotEmpty;
+
+    setState(() => _sending = true);
+    try {
+      var emailedTo = '';
+      var mailNote = '';
+      if (canEmail) {
+        final copy = MailService.applicantMessageEmail(
+          guardianFirstName: app.guardianFirstName,
+          learnerName: app.learnerFullName,
+          message: text,
+          fromName: me?.fullName ?? '',
+          schoolName: auth.activeSchoolName,
+        );
+        final outcome = await mail.send(
+          to: app.guardianEmail,
+          subject: copy.subject,
+          text: copy.text,
+        );
+        // Only claim it was emailed when the send actually succeeded.
+        if (outcome == MailOutcome.sent) emailedTo = app.guardianEmail;
+        mailNote = ' — ${outcome.label}';
+      } else if (wantsEmail) {
+        mailNote = ' — no email address on the application';
+      }
+
+      await db.addApplicationComment(
+        app.id,
+        ApplicationComment(
+          id: '',
+          text: text,
+          byUid: me?.uid ?? '',
+          byName: me?.fullName ?? '',
+          internal: !_toApplicant,
+          emailedTo: emailedTo,
+        ),
+      );
+      activity.log(
+          _toApplicant
+              ? ActivityAction.applicationMessaged
+              : ActivityAction.applicationCommented,
+          target: app.learnerFullName,
+          details: _toApplicant ? 'message to applicant' : 'internal note');
+
+      _text.clear();
+      if (!mounted) return;
+      showSnack(
+          context,
+          _toApplicant
+              ? 'Message sent to the applicant$mailNote.'
+              : 'Note added.');
+    } catch (e) {
+      if (mounted) showSnack(context, 'Could not post: $e');
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final db = context.read<FirestoreService>();
+    final hasEmail = widget.app.guardianEmail.isNotEmpty;
+
+    return SectionCard(
+      title: 'Notes & messages',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          StreamBuilder<List<ApplicationComment>>(
+            stream: db.watchApplicationComments(widget.app.id),
+            builder: (context, snap) {
+              if (snap.hasError) {
+                return const Text(
+                    'Could not load the thread. Deploy the latest Firestore '
+                    'rules and try again.',
+                    style: TextStyle(color: Colors.grey));
+              }
+              final comments = snap.data ?? const <ApplicationComment>[];
+              if (comments.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: Text(
+                      'No notes yet. Leave one for the review team, or write '
+                      'to the applicant.',
+                      style: TextStyle(color: Colors.grey)),
+                );
+              }
+              return Column(
+                children: comments.map((c) => _CommentRow(comment: c)).toList(),
+              );
+            },
+          ),
+          const Divider(height: 24),
+          TextField(
+            controller: _text,
+            minLines: 2,
+            maxLines: 5,
+            decoration: InputDecoration(
+              hintText: _toApplicant
+                  ? 'Message the applicant will read…'
+                  : 'Internal note for the review team…',
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              ChoiceChip(
+                avatar: const Icon(Icons.lock_outline, size: 16),
+                label: const Text('Internal note'),
+                selected: !_toApplicant,
+                onSelected: (_) => setState(() => _toApplicant = false),
+              ),
+              ChoiceChip(
+                avatar: const Icon(Icons.forum_outlined, size: 16),
+                label: const Text('Message the applicant'),
+                selected: _toApplicant,
+                onSelected: (_) => setState(() => _toApplicant = true),
+              ),
+              if (_toApplicant)
+                FilterChip(
+                  avatar: const Icon(Icons.mail_outline, size: 16),
+                  label: Text(hasEmail
+                      ? 'Also email ${widget.app.guardianEmail}'
+                      : 'No email on file'),
+                  selected: _alsoEmail && hasEmail,
+                  onSelected: hasEmail
+                      ? (v) => setState(() => _alsoEmail = v)
+                      : null,
+                ),
+              const Spacer(),
+              FilledButton.icon(
+                onPressed: _sending ? null : _post,
+                icon: _sending
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.send, size: 18),
+                label: Text(_toApplicant ? 'Send' : 'Add note'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CommentRow extends StatelessWidget {
+  const _CommentRow({required this.comment});
+  final ApplicationComment comment;
+
+  @override
+  Widget build(BuildContext context) {
+    final colour = comment.internal ? Colors.blueGrey : Colors.teal;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: colour.withValues(alpha: 0.15),
+            child: Icon(
+                comment.internal ? Icons.lock_outline : Icons.forum_outlined,
+                size: 16,
+                color: colour),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                          comment.byName.isEmpty ? 'Staff' : comment.byName,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              const TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                    const SizedBox(width: 8),
+                    StatusChip(
+                        comment.internal ? 'Internal' : 'Applicant', colour),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(comment.text),
+                const SizedBox(height: 2),
+                Text(
+                  [
+                    formatDateTime(comment.at),
+                    if (comment.emailed) 'emailed to ${comment.emailedTo}',
+                  ].join(' · '),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

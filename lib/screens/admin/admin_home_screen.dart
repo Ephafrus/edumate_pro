@@ -101,7 +101,7 @@ class _StatGrid extends StatelessWidget {
                       route: Routes.adminClasses),
                   _Stat('Staff', '${staffSnap.data?.length ?? 0}',
                       Icons.badge_outlined, Colors.deepPurple,
-                      route: Routes.adminStaff),
+                      route: Routes.adminUsers),
                 ];
                 return GridView.count(
                   crossAxisCount: columns,
@@ -293,6 +293,7 @@ class _QuickActions extends StatelessWidget {
       ('Add a learner', Icons.person_add_alt, Routes.adminLearners),
       ('Create a class', Icons.add_business, Routes.adminClasses),
       ('Add staff', Icons.badge_outlined, Routes.adminStaff),
+      ('School users', Icons.people_outline, Routes.adminUsers),
       ('Send a broadcast', Icons.campaign_outlined, Routes.adminBroadcasts),
       ('Record a payment', Icons.request_quote_outlined, Routes.adminFees),
       ('Progress reports', Icons.insights_outlined, Routes.adminProgress),

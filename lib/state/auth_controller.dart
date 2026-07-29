@@ -252,6 +252,23 @@ class AuthController extends ChangeNotifier {
           email: profile?.email ?? invite.email,
         ));
         await _db.markInviteClaimed(invite.id, user.uid);
+        // Any class or subject an admin assigned to this invite now points
+        // at a real account, so their teaching appears on first sign-in.
+        final name = [
+          profile?.firstName.isNotEmpty == true
+              ? profile!.firstName
+              : invite.firstName,
+          profile?.lastName.isNotEmpty == true
+              ? profile!.lastName
+              : invite.lastName,
+        ].join(' ').trim();
+        try {
+          await _db.resolveTeacherInvite(
+              invite.schoolId, invite.id, user.uid, name);
+        } catch (_) {
+          // Not fatal: they still get the membership, an admin can re-pick
+          // them on the class.
+        }
       }
       // Staff arrive pre-named from their invite; parents fill in a profile.
       final named = invites.firstWhere((i) => i.fullName.isNotEmpty,

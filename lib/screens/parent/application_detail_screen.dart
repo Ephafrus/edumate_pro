@@ -89,6 +89,51 @@ class ApplicationDetailScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 SectionCard(
+                  title: 'Messages from the school',
+                  child: StreamBuilder<List<ApplicationComment>>(
+                    stream: db.watchApplicationComments(applicationId,
+                        visibleOnly: true),
+                    builder: (context, snap) {
+                      final messages =
+                          snap.data ?? const <ApplicationComment>[];
+                      if (messages.isEmpty) {
+                        return const Text(
+                            'Nothing yet. The school will write here if they '
+                            'need anything from you.',
+                            style: TextStyle(color: Colors.grey));
+                      }
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: messages
+                            .map((m) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(m.text),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        [
+                                          formatDateTime(m.at),
+                                          if (m.byName.isNotEmpty)
+                                            'from ${m.byName}',
+                                        ].join(' · '),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(color: Colors.grey),
+                                      ),
+                                    ],
+                                  ),
+                                ))
+                            .toList(),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SectionCard(
                   title: 'Learner',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

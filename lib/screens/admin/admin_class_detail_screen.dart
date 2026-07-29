@@ -8,6 +8,7 @@ import '../../services/firestore_service.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/common.dart';
 import '../../widgets/progress_report.dart';
+import '../../widgets/teacher_picker.dart';
 
 /// A class, opened from the classes list: who teaches it, what subjects are
 /// taught in it (and by whom), and the learners on its register — each
@@ -55,11 +56,43 @@ class AdminClassDetailScreen extends StatelessWidget {
                     [
                       cls.grade,
                       if (cls.year != null) '${cls.year}',
-                      cls.teacherName.isEmpty
-                          ? 'No class teacher assigned'
-                          : 'Class teacher: ${cls.teacherName}',
                     ].join(' · '),
                     style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height: 16),
+
+                // ---- Class teacher -------------------------------------
+                SectionCard(
+                  title: 'Class teacher',
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: CircleAvatar(
+                      backgroundColor: cls.teacherName.isEmpty
+                          ? Colors.orange.withValues(alpha: 0.15)
+                          : Colors.indigo.withValues(alpha: 0.15),
+                      child: Icon(Icons.badge_outlined,
+                          size: 18,
+                          color: cls.teacherName.isEmpty
+                              ? Colors.orange
+                              : Colors.indigo),
+                    ),
+                    title: Text(cls.teacherName.isEmpty
+                        ? 'Nobody assigned'
+                        : cls.teacherName),
+                    subtitle: cls.teacherPending
+                        ? const Text('Invited — takes effect at their first '
+                            'sign-in')
+                        : null,
+                    trailing: TextButton.icon(
+                      onPressed: () => showDialog(
+                          context: context,
+                          builder: (_) =>
+                              AssignTeacherDialog(schoolClass: cls)),
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      label:
+                          Text(cls.teacherName.isEmpty ? 'Assign' : 'Change'),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 16),
 
                 // ---- Subjects ------------------------------------------
@@ -88,13 +121,20 @@ class AdminClassDetailScreen extends StatelessWidget {
                                           Icons.menu_book_outlined,
                                           size: 18)),
                                   title: Text(s.name),
-                                  subtitle: Text(s.teacherName.isEmpty
-                                      ? 'No teacher assigned'
-                                      : s.teacherName),
-                                  trailing: s.teacherName.isEmpty
-                                      ? const StatusChip(
-                                          'Unassigned', Colors.orange)
-                                      : null,
+                                  subtitle: Text(teacherStatusLine(
+                                      s.teacherName,
+                                      pending: s.teacherPending)),
+                                  trailing: TextButton.icon(
+                                    onPressed: () => showDialog(
+                                        context: context,
+                                        builder: (_) =>
+                                            AssignTeacherDialog(subject: s)),
+                                    icon: const Icon(Icons.person_outline,
+                                        size: 18),
+                                    label: Text(s.teacherName.isEmpty
+                                        ? 'Assign'
+                                        : 'Change'),
+                                  ),
                                 ))
                             .toList(),
                       );

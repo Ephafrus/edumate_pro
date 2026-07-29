@@ -33,6 +33,67 @@ class ApplicationEvent {
       );
 }
 
+/// A note or message on an application, at
+/// `schools/{schoolId}/applications/{appId}/comments/{id}`.
+///
+/// Two kinds live here, distinguished by [internal]:
+///  * an **internal note** the review team leaves for each other, and
+///  * a **message to the applicant**, which the parent sees on their
+///    application page and can also be emailed to them.
+///
+/// Keeping both in one thread means the review conversation reads in order,
+/// and the applicant only ever sees the half addressed to them.
+class ApplicationComment {
+  const ApplicationComment({
+    required this.id,
+    required this.text,
+    required this.byUid,
+    this.byName = '',
+    this.internal = true,
+    this.emailedTo = '',
+    this.at,
+  });
+
+  final String id;
+  final String text;
+  final String byUid;
+  final String byName;
+
+  /// True for staff-only notes; false for messages the applicant can read.
+  final bool internal;
+
+  /// The address a copy was emailed to, empty when it was not emailed.
+  final String emailedTo;
+  final DateTime? at;
+
+  bool get emailed => emailedTo.isNotEmpty;
+
+  Map<String, dynamic> toMap() => {
+        'text': text,
+        'byUid': byUid,
+        'byName': byName,
+        'internal': internal,
+        'emailedTo': emailedTo,
+        'at': at != null
+            ? Timestamp.fromDate(at!)
+            : FieldValue.serverTimestamp(),
+      };
+
+  factory ApplicationComment.fromDoc(
+      DocumentSnapshot<Map<String, dynamic>> doc) {
+    final m = doc.data() ?? const {};
+    return ApplicationComment(
+      id: doc.id,
+      text: (m['text'] ?? '') as String,
+      byUid: (m['byUid'] ?? '') as String,
+      byName: (m['byName'] ?? '') as String,
+      internal: (m['internal'] ?? true) as bool,
+      emailedTo: (m['emailedTo'] ?? '') as String,
+      at: (m['at'] as Timestamp?)?.toDate(),
+    );
+  }
+}
+
 /// An enrollment application at `applications/{id}`, captured through the
 /// step-by-step wizard: learner details → guardian details → medical &
 /// language info → supporting documents → review & submit.

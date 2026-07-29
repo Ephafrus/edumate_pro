@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/constants.dart';
@@ -233,6 +235,79 @@ class FirestoreService {
         activeSchoolId ?? _noSchool,
         roles: const [UserRole.admin, UserRole.principal, UserRole.teacher],
       ).map((ms) => ms.map((m) => m.toAppUser()).toList());
+
+  /// Everybody who can be put in front of a class: active staff members plus
+  /// staff who have been invited but have not signed in yet.
+  ///
+  /// Including unclaimed invites is what makes teacher assignment work
+  /// straight after "Add staff member" — see [TeacherOption].
+  Stream<List<TeacherOption>> watchTeacherOptions() {
+    final schoolId = activeSchoolId ?? _noSchool;
+    return combineLatest2<List<SchoolMembership>, List<StaffInvite>,
+        List<TeacherOption>>(
+      watchMembers(schoolId,
+          roles: const [
+            UserRole.teacher,
+            UserRole.principal,
+            UserRole.admin,
+          ]),
+      watchStaffInvites(schoolId),
+      (members, invites) {
+        final claimedUids = members.map((m) => m.uid).toSet();
+        return [
+          ...members
+              .where((m) => m.active)
+              .map(TeacherOption.member),
+          ...invites
+              .where((i) => !i.claimed && !claimedUids.contains(i.claimedByUid))
+              .map(TeacherOption.invite),
+        ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      },
+    );
+  }
+
+  /// Sets (or clears, with a null [teacher]) the class teacher.
+  Future<void> assignClassTeacher(String classId, TeacherOption? teacher) =>
+      _col(Collections.classes).doc(classId).update({
+        'teacherUid': teacher?.uid,
+        'teacherName': teacher?.name ?? '',
+        'teacherInviteId': teacher?.inviteId,
+      });
+
+  /// Sets (or clears) the teacher who teaches a subject.
+  Future<void> assignSubjectTeacher(String subjectId, TeacherOption? teacher) =>
+      _col(Collections.subjects).doc(subjectId).update({
+        'teacherUid': teacher?.uid,
+        'teacherName': teacher?.name ?? '',
+        'teacherInviteId': teacher?.inviteId,
+      });
+
+  /// Completes every teaching link that was made against a staff invite,
+  /// now that the invite has been claimed by a real account.
+  ///
+  /// Called on first sign-in, so a class or subject assigned to somebody who
+  /// had not signed in yet starts working for them without an admin having to
+  /// go back and re-pick them.
+  Future<void> resolveTeacherInvite(
+      String schoolId, String inviteId, String uid, String name) async {
+    final school = _db.collection(Collections.schools).doc(schoolId);
+    for (final collection in const [
+      Collections.classes,
+      Collections.subjects,
+    ]) {
+      final snap = await school
+          .collection(collection)
+          .where('teacherInviteId', isEqualTo: inviteId)
+          .get();
+      for (final doc in snap.docs) {
+        await doc.reference.update({
+          'teacherUid': uid,
+          if (name.isNotEmpty) 'teacherName': name,
+          'teacherInviteId': null,
+        });
+      }
+    }
+  }
 
   // ---- Staff invites -------------------------------------------------------
   // Global collection keyed by phone number **and school**, so one person
@@ -566,6 +641,34 @@ class FirestoreService {
       .doc(id)
       .snapshots()
       .map((d) => d.exists ? EnrollmentApplication.fromDoc(d) : null);
+
+  // ---- Application comments ------------------------------------------------
+
+  CollectionReference<Map<String, dynamic>> _comments(String applicationId) =>
+      _col(Collections.applications)
+          .doc(applicationId)
+          .collection(Collections.comments);
+
+  /// The review thread on an application, oldest first.
+  ///
+  /// Pass `visibleOnly: true` for the parent's view — it filters in the
+  /// query rather than in Dart, because the security rules only let an
+  /// applicant read the comments addressed to them.
+  Stream<List<ApplicationComment>> watchApplicationComments(
+      String applicationId,
+      {bool visibleOnly = false}) {
+    Query<Map<String, dynamic>> q = _comments(applicationId);
+    if (visibleOnly) q = q.where('internal', isEqualTo: false);
+    return q.snapshots().map((s) => s.docs
+        .map(ApplicationComment.fromDoc)
+        .toList()
+      ..sort((a, b) =>
+          (a.at ?? DateTime(0)).compareTo(b.at ?? DateTime(0))));
+  }
+
+  Future<void> addApplicationComment(
+          String applicationId, ApplicationComment comment) async =>
+      _comments(applicationId).add(comment.toMap()).then((_) {});
 
   Stream<List<EnrollmentApplication>> watchApplicationsForParent(
           String parentUid) =>
@@ -962,4 +1065,47 @@ class FirestoreService {
     });
     return created;
   }
+}
+
+/// Emits whenever either source emits, once both have produced a value.
+///
+/// Firestore gives one stream per collection, but some views need two at
+/// once (staff members *and* staff invites, for example). Small enough not to
+/// justify a reactive-extensions dependency.
+Stream<R> combineLatest2<A, B, R>(
+  Stream<A> a,
+  Stream<B> b,
+  R Function(A, B) combine,
+) {
+  late StreamController<R> controller;
+  StreamSubscription<A>? subA;
+  StreamSubscription<B>? subB;
+  late A lastA;
+  late B lastB;
+  var hasA = false;
+  var hasB = false;
+
+  void emit() {
+    if (hasA && hasB) controller.add(combine(lastA, lastB));
+  }
+
+  controller = StreamController<R>(
+    onListen: () {
+      subA = a.listen((v) {
+        lastA = v;
+        hasA = true;
+        emit();
+      }, onError: controller.addError);
+      subB = b.listen((v) {
+        lastB = v;
+        hasB = true;
+        emit();
+      }, onError: controller.addError);
+    },
+    onCancel: () async {
+      await subA?.cancel();
+      await subB?.cancel();
+    },
+  );
+  return controller.stream;
 }

@@ -180,6 +180,32 @@ class MailService {
   }
 
   /// Parent-facing email for a payment approval/rejection.
+  /// A message the review team wrote to an applicant, wrapped so it reads as
+  /// a letter from the school rather than a bare comment.
+  static ({String subject, String text}) applicantMessageEmail({
+    required String guardianFirstName,
+    required String learnerName,
+    required String message,
+    String fromName = '',
+    String schoolName = '',
+  }) {
+    final learner = learnerName.isEmpty ? 'your child' : learnerName;
+    final greeting =
+        guardianFirstName.isEmpty ? 'Good day' : 'Dear $guardianFirstName';
+    final signOff = [
+      if (fromName.isNotEmpty) fromName,
+      if (schoolName.isNotEmpty) schoolName,
+    ].join('\n');
+    return (
+      subject: 'About your application for $learner',
+      text: '$greeting,\n\n'
+          '$message\n\n'
+          'You can also see this message on your application in EduMate '
+          'Pro.\n\n'
+          '${signOff.isEmpty ? 'The admissions team' : signOff}',
+    );
+  }
+
   static ({String subject, String text}) paymentEmail({
     required String parentFirstName,
     required String purpose,

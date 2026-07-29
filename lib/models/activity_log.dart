@@ -62,6 +62,8 @@ enum ActivityAction {
   applicationSaved,
   applicationSubmitted,
   applicationStatusChanged,
+  applicationCommented,
+  applicationMessaged,
   learnerEnrolled,
 
   // Learners & classes
@@ -76,6 +78,7 @@ enum ActivityAction {
   subjectCreated,
   subjectUpdated,
   subjectDeleted,
+  teacherAssigned,
 
   // Academics
   assessmentCreated,
@@ -110,6 +113,7 @@ enum ActivityAction {
   staffInvited,
   staffInviteCancelled,
   memberAssigned,
+  memberRoleChanged,
   memberRemoved,
   memberDeactivated,
   emailSettingsUpdated,
@@ -146,6 +150,8 @@ enum ActivityAction {
       case ActivityAction.applicationSaved:
       case ActivityAction.applicationSubmitted:
       case ActivityAction.applicationStatusChanged:
+      case ActivityAction.applicationCommented:
+      case ActivityAction.applicationMessaged:
       case ActivityAction.learnerEnrolled:
         return ActivityCategory.enrollment;
       case ActivityAction.learnerCreated:
@@ -159,6 +165,7 @@ enum ActivityAction {
       case ActivityAction.subjectCreated:
       case ActivityAction.subjectUpdated:
       case ActivityAction.subjectDeleted:
+      case ActivityAction.teacherAssigned:
         return ActivityCategory.learners;
       case ActivityAction.assessmentCreated:
       case ActivityAction.marksCaptured:
@@ -188,6 +195,7 @@ enum ActivityAction {
       case ActivityAction.staffInvited:
       case ActivityAction.staffInviteCancelled:
       case ActivityAction.memberAssigned:
+      case ActivityAction.memberRoleChanged:
       case ActivityAction.memberRemoved:
       case ActivityAction.memberDeactivated:
       case ActivityAction.emailSettingsUpdated:
@@ -231,6 +239,10 @@ enum ActivityAction {
         return 'submitted an application';
       case ActivityAction.applicationStatusChanged:
         return 'changed an application status';
+      case ActivityAction.applicationCommented:
+        return 'commented on an application';
+      case ActivityAction.applicationMessaged:
+        return 'messaged an applicant';
       case ActivityAction.learnerEnrolled:
         return 'enrolled a learner';
       case ActivityAction.learnerCreated:
@@ -255,6 +267,8 @@ enum ActivityAction {
         return 'updated a subject';
       case ActivityAction.subjectDeleted:
         return 'deleted a subject';
+      case ActivityAction.teacherAssigned:
+        return 'assigned a teacher';
       case ActivityAction.assessmentCreated:
         return 'created an assessment';
       case ActivityAction.marksCaptured:
@@ -303,6 +317,8 @@ enum ActivityAction {
         return 'cancelled a staff invite';
       case ActivityAction.memberAssigned:
         return 'assigned somebody to a school';
+      case ActivityAction.memberRoleChanged:
+        return 'changed somebody\'s role';
       case ActivityAction.memberRemoved:
         return 'removed somebody from a school';
       case ActivityAction.memberDeactivated:

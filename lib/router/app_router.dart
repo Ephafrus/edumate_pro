@@ -14,6 +14,7 @@ import '../screens/admin/admin_learners_screen.dart';
 import '../screens/admin/admin_payments_screen.dart';
 import '../screens/admin/admin_progress_screen.dart';
 import '../screens/admin/admin_staff_screen.dart';
+import '../screens/admin/admin_users_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/chat/chat_list_screen.dart';
 import '../screens/chat/chat_thread_screen.dart';
@@ -61,6 +62,7 @@ class Routes {
 
   static const adminHome = '/admin';
   static const adminStaff = '/admin/staff';
+  static const adminUsers = '/admin/users';
   static const adminClasses = '/admin/classes';
   static String adminClassDetail(String id) => '/admin/classes/$id';
   static const adminLearners = '/admin/learners';
@@ -266,6 +268,9 @@ GoRouter createRouter(AuthController auth) {
       GoRoute(
           path: Routes.adminStaff,
           builder: (_, __) => const AdminStaffScreen()),
+      GoRoute(
+          path: Routes.adminUsers,
+          builder: (_, __) => const AdminUsersScreen()),
       GoRoute(
           path: Routes.adminClasses,
           builder: (_, __) => const AdminClassesScreen()),

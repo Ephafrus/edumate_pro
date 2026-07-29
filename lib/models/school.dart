@@ -148,6 +148,51 @@ class SchoolMembership {
       );
 }
 
+/// One selectable person in a "who teaches this?" picker.
+///
+/// Staff reach a school in two steps: an admin invites them by phone number,
+/// and the membership only exists once they first sign in. Offering *only*
+/// members made teacher assignment look broken — an admin who had just added
+/// a teacher found an empty dropdown. A [TeacherOption] therefore also covers
+/// unclaimed invites: pick one and the class/subject records the invite id,
+/// which is swapped for the real uid automatically on that person's first
+/// sign-in.
+class TeacherOption {
+  const TeacherOption({
+    required this.id,
+    required this.name,
+    required this.role,
+    required this.pending,
+  });
+
+  /// The staff member's uid, or the invite id when [pending].
+  final String id;
+  final String name;
+  final UserRole role;
+
+  /// True while the person still has to sign in for the first time.
+  final bool pending;
+
+  factory TeacherOption.member(SchoolMembership m) => TeacherOption(
+        id: m.uid, name: m.fullName, role: m.role, pending: false);
+
+  factory TeacherOption.invite(StaffInvite i) => TeacherOption(
+        id: i.id,
+        name: i.fullName.isEmpty ? i.phone : i.fullName,
+        role: i.role,
+        pending: true,
+      );
+
+  String? get uid => pending ? null : id;
+  String? get inviteId => pending ? id : null;
+
+  /// What the dropdown row reads: name, role, and whether we are still
+  /// waiting for them.
+  String get label =>
+      pending ? '$name (${role.label}) — awaiting first sign-in'
+              : '$name (${role.label})';
+}
+
 /// A class/register group at `classes/{id}` (e.g. "Grade 4 Blue"), optionally
 /// assigned to a teacher. Learners reference their class via `classId`.
 class SchoolClass {
@@ -158,6 +203,7 @@ class SchoolClass {
     this.year,
     this.teacherUid,
     this.teacherName = '',
+    this.teacherInviteId,
     this.createdAt,
   });
 
@@ -169,7 +215,14 @@ class SchoolClass {
 
   /// Denormalised for list rendering without extra reads.
   final String teacherName;
+
+  /// Set instead of [teacherUid] when the class teacher was picked from a
+  /// staff invite that has not been claimed yet. The link is completed
+  /// automatically the first time that person signs in.
+  final String? teacherInviteId;
   final DateTime? createdAt;
+
+  bool get teacherPending => teacherUid == null && teacherInviteId != null;
 
   Map<String, dynamic> toMap() => {
         'name': name,
@@ -177,6 +230,7 @@ class SchoolClass {
         'year': year,
         'teacherUid': teacherUid,
         'teacherName': teacherName,
+        'teacherInviteId': teacherInviteId,
         'createdAt': createdAt != null
             ? Timestamp.fromDate(createdAt!)
             : FieldValue.serverTimestamp(),
@@ -191,6 +245,7 @@ class SchoolClass {
       year: (m['year'] as num?)?.toInt(),
       teacherUid: m['teacherUid'] as String?,
       teacherName: (m['teacherName'] ?? '') as String,
+      teacherInviteId: m['teacherInviteId'] as String?,
       createdAt: (m['createdAt'] as Timestamp?)?.toDate(),
     );
   }

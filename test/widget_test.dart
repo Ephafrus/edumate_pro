@@ -1,9 +1,14 @@
 // Smoke tests that don't require a live Firebase backend.
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:edumate_pro/core/id_validation.dart';
 import 'package:edumate_pro/models/attendance.dart';
+import 'package:edumate_pro/models/app_user.dart';
 import 'package:edumate_pro/models/enums.dart';
+import 'package:edumate_pro/models/school.dart';
 import 'package:edumate_pro/services/auth_service.dart';
+import 'package:edumate_pro/services/firestore_service.dart';
 
 void main() {
   group('SA ID validation', () {
@@ -89,6 +94,74 @@ void main() {
     test('ChatApproval defaults to requested', () {
       expect(ChatApproval.fromString(null), ChatApproval.requested);
       expect(ChatApproval.fromString('approved'), ChatApproval.approved);
+    });
+  });
+
+  group('Teacher options', () {
+    test('a member carries a uid and no invite id', () {
+      final option = TeacherOption.member(const SchoolMembership(
+        schoolId: 's1',
+        uid: 'u1',
+        role: UserRole.teacher,
+        firstName: 'Thandi',
+        lastName: 'Mokoena',
+      ));
+      expect(option.uid, 'u1');
+      expect(option.inviteId, isNull);
+      expect(option.pending, isFalse);
+      expect(option.label, contains('Thandi Mokoena'));
+    });
+
+    test('an unclaimed invite carries an invite id and no uid', () {
+      final option = TeacherOption.invite(const StaffInvite(
+        id: 'inv1',
+        phone: '+27721234567',
+        role: UserRole.teacher,
+        schoolId: 's1',
+        firstName: 'Sipho',
+        lastName: 'Dlamini',
+      ));
+      expect(option.uid, isNull);
+      expect(option.inviteId, 'inv1');
+      expect(option.pending, isTrue);
+      expect(option.label, contains('awaiting first sign-in'));
+    });
+
+    test('an invite with no name falls back to the phone number', () {
+      final option = TeacherOption.invite(const StaffInvite(
+        id: 'inv2',
+        phone: '+27721234567',
+        role: UserRole.teacher,
+        schoolId: 's1',
+      ));
+      expect(option.name, '+27721234567');
+    });
+  });
+
+  group('combineLatest2', () {
+    test('waits for both sources, then emits on either', () async {
+      final a = StreamController<int>();
+      final b = StreamController<String>();
+      final seen = <String>[];
+      final sub =
+          combineLatest2(a.stream, b.stream, (int x, String y) => '$x$y')
+              .listen(seen.add);
+
+      a.add(1);
+      await Future<void>.delayed(Duration.zero);
+      expect(seen, isEmpty, reason: 'nothing until both have a value');
+
+      b.add('a');
+      await Future<void>.delayed(Duration.zero);
+      expect(seen, ['1a']);
+
+      a.add(2);
+      await Future<void>.delayed(Duration.zero);
+      expect(seen, ['1a', '2a']);
+
+      await sub.cancel();
+      await a.close();
+      await b.close();
     });
   });
 }

@@ -16,6 +16,9 @@ class Collections {
   static const classes = 'classes';
   static const learners = 'learners';
   static const applications = 'applications';
+
+  /// Notes and applicant-visible messages under an application.
+  static const comments = 'comments';
   static const payments = 'payments';
   static const chats = 'chats';
   static const attendance = 'attendance';
