@@ -49,3 +49,6 @@ app.*.map.json
 **/google-services.json
 **/GoogleService-Info.plist
 .firebase/
+
+test/rules/node_modules/
+test/rules/package-lock.json

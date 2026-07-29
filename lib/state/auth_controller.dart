@@ -49,6 +49,11 @@ class AuthController extends ChangeNotifier {
   /// hold no membership there — this is an explicit, audited oversight mode,
   /// shown with a persistent banner and exited with one tap.
   School? _viewingSchool;
+
+  /// Why the last staff-invite check failed, if it did. Surfaced on the
+  /// "choose a school" screen so an invited teacher is not left guessing.
+  String? _inviteError;
+  String? get inviteError => _inviteError;
   bool _initialised = false;
   bool _busy = false;
   String? _error;
@@ -59,6 +64,10 @@ class AuthController extends ChangeNotifier {
   String? get error => _error;
 
   bool get isAuthenticated => _auth.currentUser != null;
+
+  /// The E.164 number this session signed in with — the value a staff
+  /// invite has to match, so it is worth showing when one does not.
+  String? get phone => _auth.currentUser?.phoneNumber ?? _appUser?.phone;
 
   /// Every school this user belongs to (admin, principal, teacher or
   /// parent) — the school switcher lists these.
@@ -229,12 +238,18 @@ class AuthController extends ChangeNotifier {
   /// Turns any outstanding staff invites for this phone number into school
   /// memberships. Runs on every sign-in, so somebody already using the app
   /// picks up a **new** school the moment they are assigned to it.
-  Future<void> _claimInvites(User user) async {
+  ///
+  /// Returns how many invites were turned into memberships. A teacher who
+  /// ends up with zero is the case that used to leave them looking like a
+  /// parent, so the reason is kept in [inviteError] rather than thrown away.
+  Future<int> _claimInvites(User user) async {
     final phone = user.phoneNumber;
-    if (phone == null) return;
+    if (phone == null) return 0;
+    var claimed = 0;
     try {
       final invites = await _db.getStaffInvitesForPhone(phone);
-      if (invites.isEmpty) return;
+      _inviteError = null;
+      if (invites.isEmpty) return 0;
       final profile = _appUser;
       for (final invite in invites) {
         await _db.setMembership(SchoolMembership(
@@ -269,6 +284,10 @@ class AuthController extends ChangeNotifier {
           // Not fatal: they still get the membership, an admin can re-pick
           // them on the class.
         }
+        claimed++;
+        _activity.log(ActivityAction.memberAssigned,
+            target: invite.schoolName,
+            details: 'staff invite claimed as ${invite.role.label}');
       }
       // Staff arrive pre-named from their invite; parents fill in a profile.
       final named = invites.firstWhere((i) => i.fullName.isNotEmpty,
@@ -282,8 +301,42 @@ class AuthController extends ChangeNotifier {
         });
         _appUser = await _db.getUser(user.uid);
       }
-    } catch (_) {
-      // An unreadable/denied invite must never block sign-in.
+
+      // Keep the cached role on the user record honest, so directories and
+      // search do not label a teacher "Parent".
+      final staffInvite =
+          invites.where((i) => i.role.isStaff).firstOrNull;
+      if (staffInvite != null && _appUser?.role != staffInvite.role) {
+        try {
+          await _db.updateUser(user.uid, {'role': staffInvite.role.name});
+          _appUser = _appUser?.copyWith(role: staffInvite.role);
+        } catch (_) {/* cosmetic only */}
+      }
+    } catch (e) {
+      // An unreadable or denied invite must never block sign-in — but it
+      // must not vanish either, or the person simply appears as a parent
+      // with nothing to explain why.
+      _inviteError = e.toString();
+      if (kDebugMode) debugPrint('staff invite claim failed: $e');
+    }
+    return claimed;
+  }
+
+  /// Re-checks for staff invites on demand.
+  ///
+  /// Invites are normally claimed at sign-in, which misses somebody who was
+  /// added to a school *while already signed in*. The "choose a school"
+  /// screen calls this so a teacher can be picked up without signing out.
+  Future<int> recheckInvites() async {
+    final user = _auth.currentUser;
+    if (user == null) return 0;
+    _setBusy(true);
+    try {
+      final claimed = await _claimInvites(user);
+      if (claimed > 0) await _loadMemberships(user.uid);
+      return claimed;
+    } finally {
+      _setBusy(false);
     }
   }
 
@@ -366,11 +419,39 @@ class AuthController extends ChangeNotifier {
 
   /// A parent joins a school so they can apply for a child there. Parents
   /// self-serve; staff are assigned by a Super Admin or school admin.
+  /// Joins a school as a parent.
+  ///
+  /// Staff must never be downgraded by this: a teacher who reaches the
+  /// "choose a school" screen — because their invite had not been claimed
+  /// yet — would otherwise tap their school and overwrite their own role
+  /// with `parent`. So this first honours any staff membership they already
+  /// hold, and any staff invite still waiting for them.
   Future<bool> joinSchoolAsParent(School school) async {
     final u = _appUser;
     if (u == null) return false;
     _setBusy(true);
     try {
+      final existing = await _db.getMembership(school.id, u.uid);
+      if (existing != null && existing.role.isStaff) {
+        await _loadMemberships(u.uid);
+        notifyListeners();
+        return true;
+      }
+
+      final user = _auth.currentUser;
+      if (existing == null && user != null) {
+        // They may have been invited as staff since they last signed in.
+        final claimed = await _claimInvites(user);
+        if (claimed > 0) {
+          final now = await _db.getMembership(school.id, u.uid);
+          if (now != null && now.role.isStaff) {
+            await _loadMemberships(u.uid);
+            notifyListeners();
+            return true;
+          }
+        }
+      }
+
       await _db.setMembership(SchoolMembership(
         schoolId: school.id,
         schoolName: school.name,

@@ -151,6 +151,40 @@ Note that Super Admin is a **platform** flag on `users/{uid}`, not a school
 membership — a Super Admin holds no member document anywhere, which is why
 the rules give them an explicit bypass on school-scoped data.
 
+### How staff become staff (and why it used to fail)
+
+Staff are added by phone number, before they have an account:
+
+1. An admin adds them under **Staff**, creating a `staffInvites` document.
+2. They sign in with that number. The app finds the invite, writes their
+   `schools/{id}/members/{uid}` document with the invited role, marks the
+   invite claimed, and completes any class or subject that was assigned to
+   the invite.
+
+Step 2 is a write the person makes **about themselves**, so the rules have to
+be able to prove they really were invited — at that school, in that role.
+Rules cannot run a query, only fetch a document by id, so invites live at a
+**derivable id**: `{schoolId}_{phoneE164}`. Without that, the membership write
+is refused, the teacher lands on "choose a school", and joining from there
+writes them in as a **parent** — which is exactly how invited teachers ended
+up with the wrong role.
+
+Practical consequences:
+
+* The number on the invite must match the number they sign in with, exactly.
+  The Add-staff form shows the normalised E.164 it will store, and the pending
+  invite list repeats it — check it against what they actually use.
+* Re-inviting the same number to the same school overwrites the invite rather
+  than stacking duplicates.
+* **Invites created before this change have random ids and cannot be
+  verified.** Cancel and re-add anyone still listed as pending, or they will
+  keep falling through to a parent account.
+* If somebody is added while already signed in, they do not need to sign out:
+  "choose a school" re-checks for invites on open and has a manual re-check.
+
+`joinSchoolAsParent` also refuses to downgrade an existing staff membership,
+so the join screen can no longer clobber a role.
+
 ## Phone authentication (SMS) setup
 
 Everyone signs in by phone (OTP). **A brand-new Firebase project will not send
@@ -236,6 +270,20 @@ firebase deploy --only hosting,firestore,storage
 The site goes live at `https://<project-id>.web.app`. **After deploying:** add
 your hosting domain(s) under **Authentication → Settings → Authorized domains**
 so phone sign-in works there.
+
+## Security-rules tests
+
+`flutter test` cannot exercise Firestore rules, so they have their own suite
+run against the emulator (requires Java):
+
+```bash
+cd test/rules
+npm install
+npm test
+```
+
+It covers the staff-invite claim path — that an invited teacher can write
+their own membership, and that nobody can use it to grant themselves a role.
 
 ## Test & analyze
 

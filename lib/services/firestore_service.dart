@@ -174,10 +174,21 @@ class FirestoreService {
         ..sort((a, b) => a.fullName.compareTo(b.fullName)));
 
   /// Adds (or updates) somebody's membership of a school.
-  Future<void> setMembership(SchoolMembership member) =>
-      _members(member.schoolId)
-          .doc(member.uid)
-          .set(member.toMap(), SetOptions(merge: true));
+  Future<void> setMembership(SchoolMembership member) {
+    if (member.schoolId.isEmpty) {
+      throw ArgumentError('setMembership needs a school id');
+    }
+    return _members(member.schoolId)
+        .doc(member.uid)
+        .set(member.toMap(), SetOptions(merge: true));
+  }
+
+  /// One person's membership of one school, or null if they do not belong.
+  Future<SchoolMembership?> getMembership(String schoolId, String uid) async {
+    if (schoolId.isEmpty) return null;
+    final doc = await _members(schoolId).doc(uid).get();
+    return doc.exists ? SchoolMembership.fromDoc(doc) : null;
+  }
 
   Future<void> setMemberActive(String schoolId, String uid, bool active) =>
       _members(schoolId).doc(uid).update({'active': active});
@@ -315,7 +326,27 @@ class FirestoreService {
   // their next sign-in.
 
   Future<void> createStaffInvite(StaffInvite invite) async {
-    await _db.collection(Collections.staffInvites).add(invite.toMap());
+    if (invite.schoolId.isEmpty) {
+      throw ArgumentError(
+          'A staff invite must name the school it grants access to');
+    }
+    final invites = _db.collection(Collections.staffInvites);
+    final id = StaffInvite.docId(invite.schoolId, invite.phone);
+
+    // Clear out any invite for the same person at the same school that was
+    // written before invites moved to a derivable id, so re-inviting somebody
+    // does not leave a stale duplicate the rules cannot verify.
+    try {
+      final stale = await invites
+          .where('schoolId', isEqualTo: invite.schoolId)
+          .where('phone', isEqualTo: invite.phone)
+          .get();
+      for (final doc in stale.docs) {
+        if (doc.id != id) await doc.reference.delete();
+      }
+    } catch (_) {/* best effort */}
+
+    await invites.doc(id).set(invite.toMap());
   }
 
   /// Unclaimed invites for a phone number, across all schools.

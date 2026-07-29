@@ -127,8 +127,8 @@ class AdminStaffScreen extends StatelessWidget {
                               title: Text(i.fullName.isEmpty
                                   ? i.phone
                                   : '${i.fullName} (${i.phone})'),
-                              subtitle: Text(
-                                  '${i.role.label} · waiting for first sign-in'),
+                              subtitle: Text('${i.role.label} · activates when '
+                                  '${i.phone} signs in'),
                               trailing: IconButton(
                                 tooltip: 'Cancel invite',
                                 icon: const Icon(Icons.delete_outline),
@@ -176,14 +176,23 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     final db = context.read<FirestoreService>();
+    final auth = context.read<AuthController>();
+    final schoolId = auth.activeSchoolId;
+    if (schoolId == null || schoolId.isEmpty) {
+      showSnack(context,
+          'Open a school first — an invite has to belong to one school.');
+      return;
+    }
+    // The invite is matched against the number Firebase reports at sign-in,
+    // so store the same normalised form and tell the admin what it is.
+    final e164 = AuthService.toE164(_phone.text);
     setState(() => _saving = true);
     try {
-      final auth = context.read<AuthController>();
       await db.createStaffInvite(StaffInvite(
         id: '',
-        phone: AuthService.toE164(_phone.text),
+        phone: e164,
         role: _role,
-        schoolId: auth.activeSchoolId ?? '',
+        schoolId: schoolId,
         schoolName: auth.activeSchoolName,
         firstName: _first.text.trim(),
         lastName: _last.text.trim(),
@@ -191,8 +200,10 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
       ));
       if (!mounted) return;
       Navigator.of(context).pop();
-      showSnack(context,
-          'Invite created — ask them to sign in with this phone number.');
+      showSnack(
+          context,
+          'Invite created. They must sign in with exactly $e164 to be '
+          'picked up as a ${_role.label.toLowerCase()}.');
     } catch (e) {
       if (mounted) showSnack(context, 'Could not add: $e');
     } finally {
@@ -245,12 +256,15 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _phone,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Cell phone number',
-                    helperText:
-                        'They sign in with this number (e.g. 072 123 4567)',
+                    helperText: _phone.text.trim().length < 6
+                        ? 'They sign in with this number (e.g. 072 123 4567)'
+                        : 'Saved as ${AuthService.toE164(_phone.text)} — they '
+                            'must sign in with this exact number',
                   ),
                   keyboardType: TextInputType.phone,
+                  onChanged: (_) => setState(() {}),
                   validator: (v) => (v == null || v.trim().length < 9)
                       ? 'Enter a valid cell number'
                       : null,

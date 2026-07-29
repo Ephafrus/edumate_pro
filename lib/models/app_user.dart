@@ -191,6 +191,18 @@ class StaffInvite {
   bool get claimed => claimedByUid != null;
   String get fullName => '$firstName $lastName'.trim();
 
+  /// Invites live at a **derivable** document id, `{schoolId}_{phoneE164}`.
+  ///
+  /// That is what lets the security rules verify an invite when its holder
+  /// signs in: rules can only `get()` a document by id, never query for one,
+  /// so a random id would leave no way to prove "this person really was
+  /// invited as a teacher here" — and the membership write would be refused,
+  /// dropping them back to a parent account. It also makes re-inviting the
+  /// same number to the same school idempotent instead of piling up
+  /// duplicates.
+  static String docId(String schoolId, String phoneE164) =>
+      '${schoolId}_$phoneE164';
+
   Map<String, dynamic> toMap() => {
         'phone': phone,
         'role': role.name,

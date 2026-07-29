@@ -25,11 +25,42 @@ service cloud.firestore {
     function myPhone() {
       return request.auth.token.phone_number;
     }
-    function userDoc() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    function userPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
     }
+    function userDoc() {
+      return get(userPath()).data;
+    }
+    // Guarded on existence: a signed-in caller whose user record has not been
+    // written yet (or failed to write) would otherwise make this *error*
+    // rather than return false, and an erroring clause muddies every rule
+    // that starts with a Super Admin check.
     function isSuperAdmin() {
-      return isSignedIn() && userDoc().superAdmin == true;
+      return isSignedIn()
+             && exists(userPath())
+             && userDoc().get('superAdmin', false) == true;
+    }
+
+    // An invited staff member has to be able to write their *own* member
+    // document on first sign-in — nobody else is there to do it for them.
+    // Rules cannot run a query, only fetch a document by id, which is why
+    // staff invites live at the derivable id `{schoolId}_{phoneE164}`: it
+    // lets this check prove the caller really was invited, at this school,
+    // in the role they are claiming. Without it a teacher's membership
+    // write is refused and they fall back to being a parent.
+    function invitePath(schoolId) {
+      return /databases/$(database)/documents/staffInvites/$(schoolId + '_' + myPhone());
+    }
+    function inviteGrants(invite, schoolId) {
+      return invite.phone == myPhone()
+             && invite.schoolId == schoolId
+             && invite.role == request.resource.data.role;
+    }
+    function claimsOwnStaffInvite(schoolId) {
+      return isSignedIn()
+             && request.auth.token.phone_number != null
+             && exists(invitePath(schoolId))
+             && inviteGrants(get(invitePath(schoolId)).data, schoolId);
     }
 
     // ---- Membership helpers (scoped to one school) -------------------------
@@ -120,11 +151,13 @@ service cloud.firestore {
         allow create: if isSuperAdmin()
                       || isManager(schoolId)
                       || (isSelf(uid)
-                          && request.resource.data.role == 'parent');
+                          && request.resource.data.role == 'parent')
+                      || (isSelf(uid) && claimsOwnStaffInvite(schoolId));
         allow update: if isSuperAdmin()
                       || isManager(schoolId)
                       || (isSelf(uid)
-                          && request.resource.data.role == resource.data.role);
+                          && request.resource.data.role == resource.data.role)
+                      || (isSelf(uid) && claimsOwnStaffInvite(schoolId));
         allow delete: if isSuperAdmin() || isManager(schoolId);
       }
 
