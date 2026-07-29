@@ -13,9 +13,11 @@ analyzer:
   # Generated build output (e.g. build/ios/SourcePackages, which contains the
   # Firebase plugins' own example apps and tests) is not our source and must
   # not be analyzed — it references dev-only packages and produces thousands of
-  # spurious errors in the IDE.
+  # spurious errors in the IDE. The same goes for the node dependencies of the
+  # security-rules suite, which ship Dart templates of their own.
   exclude:
     - build/**
+    - test/rules/node_modules/**
     - "**/*.g.dart"
     - "**/*.freezed.dart"
 

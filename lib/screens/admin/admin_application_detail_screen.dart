@@ -504,7 +504,6 @@ class _ReviewThreadState extends State<_ReviewThread> {
                       ? (v) => setState(() => _alsoEmail = v)
                       : null,
                 ),
-              const Spacer(),
               FilledButton.icon(
                 onPressed: _sending ? null : _post,
                 icon: _sending

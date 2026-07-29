@@ -7,7 +7,9 @@ import {
   assertSucceeds,
   assertFails,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import {
+  doc, setDoc, getDoc, collection, query, where, getDocs,
+} from 'firebase/firestore';
 
 const SCHOOL = 'school1';
 const TEACHER_UID = 'teacherUid';
@@ -97,6 +99,30 @@ await it('teacher can read the invite addressed to their number', async () => {
   await putInvite(inviteDocId, invite('teacher'));
   const db = teacherCtx().firestore();
   await assertSucceeds(getDoc(doc(db, 'staffInvites', inviteDocId)));
+});
+
+// The app does not fetch the invite by id — it *queries* for it by phone,
+// and `list` is a different rule evaluation from `get`. This is the call
+// that actually runs at sign-in.
+await it('teacher can query staffInvites for their own number', async () => {
+  await putInvite(inviteDocId, invite('teacher'));
+  const db = teacherCtx().firestore();
+  const snap = await assertSucceeds(getDocs(query(
+    collection(db, 'staffInvites'), where('phone', '==', TEACHER_PHONE))));
+  assert.equal(snap.size, 1);
+});
+
+await it('cannot query staffInvites for somebody else', async () => {
+  await putInvite(`${SCHOOL}_+27829999999`, invite('admin', { phone: '+27829999999' }));
+  const db = teacherCtx().firestore();
+  await assertFails(getDocs(query(
+    collection(db, 'staffInvites'), where('phone', '==', '+27829999999'))));
+});
+
+await it('cannot list every invite on the platform', async () => {
+  await putInvite(inviteDocId, invite('teacher'));
+  const db = teacherCtx().firestore();
+  await assertFails(getDocs(collection(db, 'staffInvites')));
 });
 
 await it('teacher can mark their own invite claimed', async () => {

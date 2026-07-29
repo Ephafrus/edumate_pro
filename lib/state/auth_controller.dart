@@ -246,10 +246,22 @@ class AuthController extends ChangeNotifier {
     final phone = user.phoneNumber;
     if (phone == null) return 0;
     var claimed = 0;
+
+    // Looking the invite up and acting on it fail for different reasons, and
+    // the difference is the whole diagnosis — so they are reported apart.
+    final List<StaffInvite> invites;
     try {
-      final invites = await _db.getStaffInvitesForPhone(phone);
-      _inviteError = null;
-      if (invites.isEmpty) return 0;
+      invites = await _db.getStaffInvitesForPhone(phone);
+    } catch (e) {
+      _inviteError = 'Could not look up staff invites for $phone '
+          '(${_reason(e)}).';
+      if (kDebugMode) debugPrint('staff invite lookup failed: $e');
+      return 0;
+    }
+    _inviteError = null;
+    if (invites.isEmpty) return 0;
+
+    try {
       final profile = _appUser;
       for (final invite in invites) {
         await _db.setMembership(SchoolMembership(
@@ -313,13 +325,30 @@ class AuthController extends ChangeNotifier {
         } catch (_) {/* cosmetic only */}
       }
     } catch (e) {
-      // An unreadable or denied invite must never block sign-in — but it
-      // must not vanish either, or the person simply appears as a parent
-      // with nothing to explain why.
-      _inviteError = e.toString();
+      // A denied invite must never block sign-in — but it must not vanish
+      // either, or the person just appears as a parent with nothing to
+      // explain why. This is the branch that fires when the rules allowing
+      // an invitee to write their own membership have not been deployed.
+      final invite = invites.first;
+      _inviteError = 'Found a ${invite.role.label.toLowerCase()} invite for '
+          '${invite.schoolName.isEmpty ? 'your school' : invite.schoolName} '
+          'but could not activate it (${_reason(e)}).'
+          '${_looksLikePermissionDenied(e) ? ' The school needs to deploy '
+              'the latest Firestore rules — until then staff sign in as '
+              'parents.' : ''}';
       if (kDebugMode) debugPrint('staff invite claim failed: $e');
     }
     return claimed;
+  }
+
+  static bool _looksLikePermissionDenied(Object e) =>
+      e.toString().contains('permission-denied');
+
+  /// The useful part of a Firebase error, without the SDK's wrapping.
+  static String _reason(Object e) {
+    final text = e.toString();
+    final code = RegExp(r'\[([a-z_]+/[a-z-]+)\]').firstMatch(text)?.group(1);
+    return code ?? text.replaceFirst('Exception: ', '');
   }
 
   /// Re-checks for staff invites on demand.

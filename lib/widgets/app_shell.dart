@@ -249,6 +249,25 @@ class AppShell extends StatelessWidget {
   }
 }
 
+/// Where the app currently is, for highlighting the navigation.
+///
+/// Deliberately unable to throw. `GoRouterState.of` resolves only inside a
+/// `RouteBase.builder` subtree, and a page can rebuild after go_router has
+/// deregistered its state — which happens routinely during the redirects
+/// that follow sign-in. When it did, the sidebar threw, an error box
+/// replaced the shell, and that box blew the surrounding Row out by tens of
+/// thousands of pixels: a highlight detail took down the whole window.
+///
+/// `GoRouter.of` is no better here — it is documented to throw during
+/// redirects — so this uses `maybeOf` and settles for no highlight on the
+/// rare frame where the router cannot be reached. Chrome should degrade,
+/// never crash.
+String currentLocation(BuildContext context) {
+  final router = GoRouter.maybeOf(context);
+  if (router == null) return '';
+  return router.routeInformationProvider.value.uri.path;
+}
+
 /// Persistent, grouped navigation rail shown on wide viewports — the
 /// professional "app chrome" that keeps every tool one click away instead of
 /// buried behind a menu.
@@ -260,7 +279,7 @@ class _Sidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final current = GoRouterState.of(context).matchedLocation;
+    final current = currentLocation(context);
     final user = auth.appUser;
 
     String? lastSection;
