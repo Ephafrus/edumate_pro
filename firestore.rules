@@ -138,7 +138,17 @@ service cloud.firestore {
     // join); only Super Admins create or change schools.
     match /schools/{schoolId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isSuperAdmin();
+      allow create, delete: if isSuperAdmin();
+      // A school's own admin or principal maintains its identity — name,
+      // contact details, motto and logo. Deliberately **not** `active`:
+      // suspending a school is the platform's decision, and a school must
+      // not be able to un-suspend itself.
+      allow update: if isSuperAdmin()
+                    || (isManager(schoolId)
+                        && request.resource.data.diff(resource.data)
+                             .affectedKeys()
+                             .hasOnly(['name', 'address', 'phone', 'email',
+                                       'motto', 'logoUrl']));
 
       // ---- Membership ------------------------------------------------------
       // Readable by the school's staff (directory) and by the person the

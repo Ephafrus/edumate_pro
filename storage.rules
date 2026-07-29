@@ -29,6 +29,17 @@ service firebase.storage {
                    && request.resource.size < 20 * 1024 * 1024;
     }
 
+    // School logos: shown to everyone at the school (and on the sign-in
+    // page), so any signed-in user may read. Writes are gated on size and
+    // auth here; who may actually change a school's logo is enforced on the
+    // Firestore document that records it.
+    match /schoolLogos/{schoolId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
     // Profile photos: owner writes their own, any signed-in user reads.
     match /profilePhotos/{fileName} {
       allow read: if request.auth != null;

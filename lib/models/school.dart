@@ -16,6 +16,7 @@ class School {
     this.phone = '',
     this.email = '',
     this.motto = '',
+    this.logoUrl = '',
     this.active = true,
     this.createdAt,
   });
@@ -27,6 +28,16 @@ class School {
   final String email;
   final String motto;
 
+  /// The school's badge, shown wherever the school is identified — the app
+  /// bar, the sidebar and the school switcher. Empty until an admin uploads
+  /// one, in which case the school's initial stands in.
+  final String logoUrl;
+
+  bool get hasLogo => logoUrl.isNotEmpty;
+
+  /// First letter of the name, for the placeholder badge.
+  String get initial => name.isEmpty ? '?' : name.trim()[0].toUpperCase();
+
   /// A Super Admin can suspend a school without deleting its data.
   final bool active;
   final DateTime? createdAt;
@@ -37,6 +48,7 @@ class School {
         'phone': phone,
         'email': email,
         'motto': motto,
+        'logoUrl': logoUrl,
         'active': active,
         'createdAt': createdAt != null
             ? Timestamp.fromDate(createdAt!)
@@ -52,6 +64,7 @@ class School {
       phone: (m['phone'] ?? '') as String,
       email: (m['email'] ?? '') as String,
       motto: (m['motto'] ?? '') as String,
+      logoUrl: (m['logoUrl'] ?? '') as String,
       active: (m['active'] ?? true) as bool,
       createdAt: (m['createdAt'] as Timestamp?)?.toDate(),
     );

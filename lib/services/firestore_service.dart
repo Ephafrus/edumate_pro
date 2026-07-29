@@ -132,6 +132,16 @@ class FirestoreService {
     return ref.id;
   }
 
+  /// Live view of one school, so a logo or name change reaches every screen
+  /// showing it without anyone signing out.
+  Stream<School?> watchSchool(String id) => id.isEmpty
+      ? Stream<School?>.value(null)
+      : _db
+          .collection(Collections.schools)
+          .doc(id)
+          .snapshots()
+          .map((d) => d.exists ? School.fromDoc(d) : null);
+
   Future<void> updateSchool(String id, Map<String, dynamic> data) =>
       _db.collection(Collections.schools).doc(id).update(data);
 

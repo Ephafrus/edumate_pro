@@ -49,6 +49,22 @@ class StorageService {
     return _put(ref, bytes, contentType);
   }
 
+  /// Uploads a school's logo.
+  ///
+  /// Stamped rather than fixed-named so a replacement is fetched immediately
+  /// — a stable path would keep serving the old badge from the browser and
+  /// CDN caches long after it was changed.
+  Future<String> uploadSchoolLogo(
+    String schoolId,
+    Uint8List bytes, {
+    required String filename,
+    String? contentType,
+  }) {
+    final stamp = DateTime.now().millisecondsSinceEpoch;
+    final ref = _storage.ref('schoolLogos/$schoolId/$stamp-$filename');
+    return _put(ref, bytes, contentType);
+  }
+
   /// Uploads a profile photo and returns its download URL.
   Future<String> uploadProfilePhoto(
     String uid,

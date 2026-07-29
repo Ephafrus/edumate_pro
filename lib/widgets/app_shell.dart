@@ -9,6 +9,8 @@ import '../models/broadcast.dart';
 import '../models/enums.dart';
 import '../router/app_router.dart';
 import '../services/firestore_service.dart';
+import '../models/school.dart';
+import 'school_logo.dart';
 import '../state/auth_controller.dart';
 
 class NavItem {
@@ -158,6 +160,9 @@ class AppShell extends StatelessWidget {
             section: 'Communication'),
         NavItem('Calendar', Routes.calendar, Icons.calendar_month_outlined,
             section: 'Communication'),
+        NavItem('School settings', Routes.adminSchoolSettings,
+            Icons.apartment_outlined,
+            section: 'Settings'),
         NavItem('Email settings', Routes.adminEmailSettings,
             Icons.outgoing_mail,
             section: 'Settings'),
@@ -462,7 +467,8 @@ class _SchoolSwitcher extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     final label = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.only(
+          left: 6, right: 12, top: 4, bottom: 4),
       decoration: BoxDecoration(
         color: scheme.primaryContainer,
         borderRadius: BorderRadius.circular(20),
@@ -470,8 +476,21 @@ class _SchoolSwitcher extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.apartment, size: 16, color: scheme.onPrimaryContainer),
-          const SizedBox(width: 6),
+          // The school's own badge, kept live so a logo uploaded in School
+          // settings appears here without a reload.
+          StreamBuilder<School?>(
+            stream: context
+                .read<FirestoreService>()
+                .watchSchool(active.schoolId),
+            builder: (context, snap) {
+              final school = snap.data;
+              return school == null
+                  ? Icon(Icons.apartment,
+                      size: 16, color: scheme.onPrimaryContainer)
+                  : SchoolLogo(school: school, size: 22);
+            },
+          ),
+          const SizedBox(width: 8),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 180),
             child: Text(

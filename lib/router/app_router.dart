@@ -13,6 +13,7 @@ import '../screens/admin/admin_home_screen.dart';
 import '../screens/admin/admin_learners_screen.dart';
 import '../screens/admin/admin_payments_screen.dart';
 import '../screens/admin/admin_progress_screen.dart';
+import '../screens/admin/admin_school_settings_screen.dart';
 import '../screens/admin/admin_staff_screen.dart';
 import '../screens/admin/admin_users_screen.dart';
 import '../screens/auth/login_screen.dart';
@@ -76,6 +77,7 @@ class Routes {
   static const adminProgress = '/admin/progress';
   static const adminBroadcasts = '/admin/broadcasts';
   static const adminEmailSettings = '/admin/email-settings';
+  static const adminSchoolSettings = '/admin/school';
 
   /// Super Admin console (platform level, above any school).
   static const superHome = '/super';
@@ -310,6 +312,9 @@ GoRouter createRouter(AuthController auth) {
       GoRoute(
           path: Routes.adminBroadcasts,
           builder: (_, __) => const AdminBroadcastsScreen()),
+      GoRoute(
+          path: Routes.adminSchoolSettings,
+          builder: (_, __) => const AdminSchoolSettingsScreen()),
       GoRoute(
           path: Routes.adminEmailSettings,
           builder: (_, __) => const AdminEmailSettingsScreen()),
