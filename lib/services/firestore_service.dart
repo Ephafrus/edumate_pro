@@ -88,8 +88,9 @@ class FirestoreService {
 
   /// Appends one audit-trail entry. Never throws for the caller's benefit —
   /// [ActivityService] handles failures.
-  Future<void> writeActivityLog(ActivityLog entry) =>
-      _db.collection(Collections.activityLogs).add(entry.toMap());
+  Future<void> writeActivityLog(ActivityLog entry) async {
+    await _db.collection(Collections.activityLogs).add(entry.toMap());
+  }
 
   /// The Super Admin's activity feed, newest first.
   Stream<List<ActivityLog>> watchActivityLogs({int limit = 300}) => _db
@@ -231,8 +232,9 @@ class FirestoreService {
   // can be invited to several schools and picks up every membership on
   // their next sign-in.
 
-  Future<void> createStaffInvite(StaffInvite invite) =>
-      _db.collection(Collections.staffInvites).add(invite.toMap());
+  Future<void> createStaffInvite(StaffInvite invite) async {
+    await _db.collection(Collections.staffInvites).add(invite.toMap());
+  }
 
   /// Unclaimed invites for a phone number, across all schools.
   Future<List<StaffInvite>> getStaffInvitesForPhone(String phoneE164) async {

@@ -12,9 +12,13 @@ import '../services/firestore_service.dart';
 import '../state/auth_controller.dart';
 
 class NavItem {
-  const NavItem(this.label, this.route);
+  const NavItem(this.label, this.route, this.icon, {this.section = ''});
   final String label;
   final String route;
+  final IconData icon;
+
+  /// Optional heading this item sits under in the sidebar.
+  final String section;
 }
 
 /// Responsive navigation scaffold shared by every screen. On wide viewports
@@ -39,76 +43,122 @@ class AppShell extends StatelessWidget {
   List<NavItem> _navItems(AuthController auth) {
     if (!auth.isAuthenticated) {
       return const [
-        NavItem('Home', Routes.landing),
-        NavItem('Sign in', Routes.login),
+        NavItem('Home', Routes.landing, Icons.home_outlined),
+        NavItem('Sign in', Routes.login, Icons.login),
       ];
     }
     if (auth.needsProfile) {
-      return const [NavItem('My profile', Routes.profile)];
+      return const [
+        NavItem('My profile', Routes.profile, Icons.person_outline),
+      ];
     }
     if (auth.isSuperAdmin && auth.isViewingSchool) {
-      // Same tools the school's own admin has, plus a way back.
-      return const [
-        NavItem('Dashboard', Routes.adminHome),
-        NavItem('Search', Routes.search),
-        NavItem('Learners', Routes.adminLearners),
-        NavItem('Applications', Routes.adminApplications),
-        NavItem('Payments', Routes.adminPayments),
-        NavItem('Fees', Routes.adminFees),
-        NavItem('Platform console', Routes.superHome),
+      // The school's own tools, plus a way back to the platform console.
+      return [
+        ..._adminNav(),
+        const NavItem('Platform console', Routes.superHome,
+            Icons.admin_panel_settings,
+            section: 'Platform'),
       ];
     }
     if (auth.isSuperAdmin) {
       return const [
-        NavItem('Schools', Routes.superHome),
-        NavItem('Users', Routes.superUsers),
-        NavItem('System log', Routes.superActivity),
-        NavItem('Search', Routes.search),
-        NavItem('My profile', Routes.profile),
+        NavItem('Schools', Routes.superHome, Icons.school_outlined,
+            section: 'Platform'),
+        NavItem('Users', Routes.superUsers, Icons.people_outline,
+            section: 'Platform'),
+        NavItem('System log', Routes.superActivity, Icons.history,
+            section: 'Platform'),
+        NavItem('Search', Routes.search, Icons.search, section: 'Platform'),
+        NavItem('My profile', Routes.profile, Icons.person_outline,
+            section: 'Account'),
       ];
     }
     if (auth.needsSchool) {
       return const [
-        NavItem('Choose a school', Routes.joinSchool),
-        NavItem('My profile', Routes.profile),
+        NavItem('Choose a school', Routes.joinSchool, Icons.school_outlined),
+        NavItem('My profile', Routes.profile, Icons.person_outline),
       ];
     }
     switch (auth.role) {
       case UserRole.parent:
         return const [
-          NavItem('Home', Routes.parentHome),
-          NavItem('Apply', Routes.apply),
-          NavItem('Payments', Routes.parentPayments),
-          NavItem('Calendar', Routes.calendar),
-          NavItem('Messages', Routes.chats),
-          NavItem('My profile', Routes.profile),
+          NavItem('Home', Routes.parentHome, Icons.home_outlined),
+          NavItem('Apply for a child', Routes.apply, Icons.assignment_add,
+              section: 'Enrollment'),
+          NavItem('Payments', Routes.parentPayments,
+              Icons.receipt_long_outlined,
+              section: 'Finance'),
+          NavItem('Calendar', Routes.calendar, Icons.calendar_month_outlined,
+              section: 'School'),
+          NavItem('Announcements', Routes.announcements,
+              Icons.campaign_outlined,
+              section: 'School'),
+          NavItem('Messages', Routes.chats, Icons.chat_outlined,
+              section: 'School'),
+          NavItem('My profile', Routes.profile, Icons.person_outline,
+              section: 'Account'),
         ];
       case UserRole.teacher:
         return const [
-          NavItem('My classes', Routes.teacherHome),
-          NavItem('Search', Routes.search),
-          NavItem('Scan', Routes.scan),
-          NavItem('Calendar', Routes.calendar),
-          NavItem('Messages', Routes.chats),
-          NavItem('My profile', Routes.profile),
+          NavItem('My classes', Routes.teacherHome, Icons.groups_outlined),
+          NavItem('Scan attendance', Routes.scan, Icons.qr_code_scanner,
+              section: 'Teaching'),
+          NavItem('Search', Routes.search, Icons.search,
+              section: 'Teaching'),
+          NavItem('Calendar', Routes.calendar, Icons.calendar_month_outlined,
+              section: 'School'),
+          NavItem('Messages', Routes.chats, Icons.chat_outlined,
+              section: 'School'),
+          NavItem('My profile', Routes.profile, Icons.person_outline,
+              section: 'Account'),
         ];
       case UserRole.admin:
       case UserRole.principal:
-        // The rest of the admin area (classes, staff, broadcasts, calendar,
-        // email settings, chat requests) is reached from dashboard tiles.
-        return const [
-          NavItem('Dashboard', Routes.adminHome),
-          NavItem('Search', Routes.search),
-          NavItem('Learners', Routes.adminLearners),
-          NavItem('Applications', Routes.adminApplications),
-          NavItem('Payments', Routes.adminPayments),
-          NavItem('Fees', Routes.adminFees),
-          NavItem('Messages', Routes.chats),
-        ];
+        return _adminNav();
       case null:
         return const [];
     }
   }
+
+  /// The full school-admin toolset, grouped for the sidebar.
+  List<NavItem> _adminNav() => const [
+        NavItem('Overview', Routes.adminHome, Icons.dashboard_outlined),
+        NavItem('Search', Routes.search, Icons.search),
+        NavItem('Applications', Routes.adminApplications,
+            Icons.assignment_outlined,
+            section: 'Enrollment'),
+        NavItem('Learners', Routes.adminLearners, Icons.child_care_outlined,
+            section: 'People'),
+        NavItem('Classes', Routes.adminClasses, Icons.meeting_room_outlined,
+            section: 'People'),
+        NavItem('Staff', Routes.adminStaff, Icons.badge_outlined,
+            section: 'People'),
+        NavItem('Progress reports', Routes.adminProgress,
+            Icons.insights_outlined,
+            section: 'Academics'),
+        NavItem('Scan attendance', Routes.scan, Icons.qr_code_scanner,
+            section: 'Academics'),
+        NavItem('Payments', Routes.adminPayments,
+            Icons.receipt_long_outlined,
+            section: 'Finance'),
+        NavItem('Fees', Routes.adminFees, Icons.request_quote_outlined,
+            section: 'Finance'),
+        NavItem('Broadcasts', Routes.adminBroadcasts, Icons.campaign_outlined,
+            section: 'Communication'),
+        NavItem('Messages', Routes.chats, Icons.chat_outlined,
+            section: 'Communication'),
+        NavItem('Chat requests', Routes.adminChatRequests,
+            Icons.mark_chat_unread_outlined,
+            section: 'Communication'),
+        NavItem('Calendar', Routes.calendar, Icons.calendar_month_outlined,
+            section: 'Communication'),
+        NavItem('Email settings', Routes.adminEmailSettings,
+            Icons.outgoing_mail,
+            section: 'Settings'),
+        NavItem('My profile', Routes.profile, Icons.person_outline,
+            section: 'Account'),
+      ];
 
   @override
   Widget build(BuildContext context) {
@@ -143,11 +193,6 @@ class AppShell extends StatelessWidget {
         actions: [
           if (isDesktop && auth.memberships.isNotEmpty)
             const _SchoolSwitcher(),
-          if (isDesktop)
-            ...items.map((it) => TextButton(
-                  onPressed: () => context.go(it.route),
-                  child: Text(it.label),
-                )),
           if (auth.isAuthenticated && auth.appUser != null)
             _AnnouncementsBell(user: auth.appUser!),
           IconButton(
@@ -168,21 +213,167 @@ class AppShell extends StatelessWidget {
         ],
       ),
       drawer: isDesktop ? null : _NavDrawer(items: items, auth: auth),
-      body: Column(
+      body: Row(
         children: [
-          if (auth.isViewingSchool) const _OversightBanner(),
-          if (breadcrumb != null)
-            Container(
-              width: double.infinity,
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text(breadcrumb!,
-                  style: Theme.of(context).textTheme.bodySmall),
-            ),
+          // Persistent sidebar on wide screens; the drawer covers mobile.
+          if (isDesktop && items.length > 2)
+            _Sidebar(items: items, auth: auth),
           Expanded(
-            child: scrollable ? SingleChildScrollView(child: body) : body,
+            child: Column(
+              children: [
+                if (auth.isViewingSchool) const _OversightBanner(),
+                if (breadcrumb != null)
+                  Container(
+                    width: double.infinity,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 8),
+                    child: Text(breadcrumb!,
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ),
+                Expanded(
+                  child:
+                      scrollable ? SingleChildScrollView(child: body) : body,
+                ),
+                const _Footer(),
+              ],
+            ),
           ),
-          const _Footer(),
+        ],
+      ),
+    );
+  }
+}
+
+/// Persistent, grouped navigation rail shown on wide viewports — the
+/// professional "app chrome" that keeps every tool one click away instead of
+/// buried behind a menu.
+class _Sidebar extends StatelessWidget {
+  const _Sidebar({required this.items, required this.auth});
+  final List<NavItem> items;
+  final AuthController auth;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final current = GoRouterState.of(context).matchedLocation;
+    final user = auth.appUser;
+
+    String? lastSection;
+    final children = <Widget>[];
+    for (final it in items) {
+      if (it.section.isNotEmpty && it.section != lastSection) {
+        children.add(Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 12, 6),
+          child: Text(
+            it.section.toUpperCase(),
+            style: TextStyle(
+              fontSize: 11,
+              letterSpacing: 1.1,
+              fontWeight: FontWeight.w700,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ));
+        lastSection = it.section;
+      }
+      // Longest-prefix match so detail pages keep their parent highlighted.
+      final selected = current == it.route ||
+          (it.route != '/' && current.startsWith('${it.route}/'));
+      children.add(Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+        child: Material(
+          color: selected ? scheme.secondaryContainer : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => context.go(it.route),
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  Icon(it.icon,
+                      size: 20,
+                      color: selected
+                          ? scheme.onSecondaryContainer
+                          : scheme.onSurfaceVariant),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      it.label,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight:
+                            selected ? FontWeight.w700 : FontWeight.w500,
+                        color: selected
+                            ? scheme.onSecondaryContainer
+                            : scheme.onSurface,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ));
+    }
+
+    return Container(
+      width: 248,
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(right: BorderSide(color: scheme.outlineVariant)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (user != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: scheme.primaryContainer,
+                    child: Text(
+                      user.firstName.isEmpty
+                          ? '?'
+                          : user.firstName[0].toUpperCase(),
+                      style: TextStyle(
+                          color: scheme.onPrimaryContainer,
+                          fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(user.fullName,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 14)),
+                        Text(
+                          auth.isSuperAdmin
+                              ? 'Super Admin'
+                              : (auth.role?.label ?? ''),
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: scheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const Divider(height: 8),
+          Expanded(child: ListView(padding: EdgeInsets.zero, children: children)),
         ],
       ),
     );
@@ -398,7 +589,10 @@ class _NavDrawer extends StatelessWidget {
               ),
             ),
             ...items.map((it) => ListTile(
+                  leading: Icon(it.icon),
                   title: Text(it.label),
+                  subtitle:
+                      it.section.isEmpty ? null : Text(it.section),
                   onTap: () {
                     Navigator.of(context).pop();
                     context.go(it.route);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants.dart';
@@ -7,6 +8,7 @@ import '../../models/academics.dart';
 import '../../models/app_user.dart';
 import '../../models/enums.dart';
 import '../../models/school.dart';
+import '../../router/app_router.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/common.dart';
@@ -67,6 +69,8 @@ class AdminClassesScreen extends StatelessWidget {
                       .map((c) => Card(
                             margin: const EdgeInsets.only(bottom: 8),
                             child: ListTile(
+                              onTap: () =>
+                                  context.go(Routes.adminClassDetail(c.id)),
                               leading: const Icon(Icons.meeting_room_outlined),
                               title: Text(c.name),
                               subtitle: Text([

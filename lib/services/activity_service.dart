@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/activity_log.dart';
@@ -39,10 +41,19 @@ class ActivityService {
       target: target,
       details: details,
     );
-    // Intentionally not awaited.
-    _db.writeActivityLog(entry).catchError((Object e) {
-      if (kDebugMode) debugPrint('activity log failed: $e');
-    });
+    // Intentionally not awaited — logging must never delay or break the
+    // action it describes.
+    unawaited(_safeWrite(entry));
+  }
+
+  Future<void> _safeWrite(ActivityLog entry) async {
+    try {
+      await _db.writeActivityLog(entry);
+    } catch (e) {
+      // Most often the Firestore rules have not been deployed yet. Never
+      // rethrow: an audit-trail failure must stay invisible to the user.
+      if (kDebugMode) debugPrint('activity log skipped: $e');
+    }
   }
 
   /// Convenience for screen-open tracking.

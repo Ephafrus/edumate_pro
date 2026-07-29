@@ -16,8 +16,10 @@ import '../../widgets/app_shell.dart';
 import '../../widgets/common.dart';
 import '../../widgets/home_banner.dart';
 
-/// Admin dashboard: live counts with pending-work badges linking into each
-/// management area.
+/// School admin home — an **overview dashboard**: the numbers that matter at
+/// a glance, what needs attention right now, and shortcuts into the areas
+/// behind them. The full toolset lives in the sidebar, so this page stays a
+/// summary rather than a menu.
 class AdminHomeScreen extends StatelessWidget {
   const AdminHomeScreen({super.key});
 
@@ -28,154 +30,285 @@ class AdminHomeScreen extends StatelessWidget {
     context.read<MailService>().flushOutboxSoon();
 
     return AppShell(
-      title: 'Dashboard',
+      title: 'Overview',
       body: ContentContainer(
+        maxWidth: 1100,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const HomeBanner(),
-            DashboardTile(
-              icon: Icons.qr_code_scanner,
-              title: 'Scan attendance QR',
-              subtitle: 'Mark learners in at drop-off and out at pick-up',
-              onTap: () => context.go(Routes.scan),
-            ),
+            Text('At a glance',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            _StatGrid(db: db),
+            const SizedBox(height: 24),
+            Text('Needs attention',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            _AttentionList(db: db),
+            const SizedBox(height: 24),
+            Text('Quick actions',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            const _QuickActions(),
             const SizedBox(height: 8),
-            StreamBuilder<List<EnrollmentApplication>>(
-              stream: db.watchApplications(),
-              builder: (context, snap) {
-                final apps = snap.data ?? [];
-                final open = apps
-                    .where((a) =>
-                        a.status == ApplicationStatus.submitted ||
-                        a.status == ApplicationStatus.underReview)
-                    .length;
-                return DashboardTile(
-                  icon: Icons.assignment_outlined,
-                  title: 'Enrollment applications',
-                  subtitle: '${apps.length} total',
-                  badge: open > 0 ? '$open to review' : null,
-                  onTap: () => context.go(Routes.adminApplications),
-                );
-              },
-            ),
-            const SizedBox(height: 8),
-            StreamBuilder<List<PaymentRecord>>(
-              stream: db.watchPayments(),
-              builder: (context, snap) {
-                final payments = snap.data ?? [];
-                final pending = payments
-                    .where((p) => p.status == PaymentStatus.pending)
-                    .length;
-                return DashboardTile(
-                  icon: Icons.receipt_long_outlined,
-                  title: 'Payments',
-                  subtitle: '${payments.length} submitted',
-                  badge: pending > 0 ? '$pending pending' : null,
-                  onTap: () => context.go(Routes.adminPayments),
-                );
-              },
-            ),
-            const SizedBox(height: 8),
-            StreamBuilder<List<ChatThread>>(
-              stream: db.watchPendingChatRequests(),
-              builder: (context, snap) {
-                final requests = snap.data ?? [];
-                return DashboardTile(
-                  icon: Icons.mark_chat_unread_outlined,
-                  title: 'Parent chat requests',
-                  subtitle: 'Parents asking to chat with a teacher',
-                  badge: requests.isNotEmpty ? '${requests.length}' : null,
-                  onTap: () => context.go(Routes.adminChatRequests),
-                );
-              },
-            ),
-            const SizedBox(height: 8),
-            StreamBuilder<List<Learner>>(
-              stream: db.watchLearners(),
-              builder: (context, snap) {
-                final learners = snap.data ?? [];
-                final unassigned = learners
-                    .where((l) =>
-                        l.status == LearnerStatus.active &&
-                        (l.classId == null || l.classId!.isEmpty))
-                    .length;
-                return DashboardTile(
-                  icon: Icons.child_care_outlined,
-                  title: 'Learners',
-                  subtitle: '${learners.length} on record',
-                  badge: unassigned > 0 ? '$unassigned need a class' : null,
-                  onTap: () => context.go(Routes.adminLearners),
-                );
-              },
-            ),
-            const SizedBox(height: 8),
-            DashboardTile(
-              icon: Icons.insights_outlined,
-              title: 'Progress reports',
-              subtitle: 'Learner results per subject, class by class',
-              onTap: () => context.go(Routes.adminProgress),
-            ),
-            const SizedBox(height: 8),
-            DashboardTile(
-              icon: Icons.request_quote_outlined,
-              title: 'Fees',
-              subtitle: 'Configure fees, outstanding balances, recording '
-                  'and bulk imports',
-              onTap: () => context.go(Routes.adminFees),
-            ),
-            const SizedBox(height: 8),
-            DashboardTile(
-              icon: Icons.campaign_outlined,
-              title: 'Broadcast messages',
-              subtitle: 'HTML notices to a learner, a class or the whole '
-                  'school — in-app + email',
-              onTap: () => context.go(Routes.adminBroadcasts),
-            ),
-            const SizedBox(height: 8),
-            DashboardTile(
-              icon: Icons.calendar_month_outlined,
-              title: 'School calendar',
-              subtitle: 'Events for the school, classes or parents',
-              onTap: () => context.go(Routes.calendar),
-            ),
-            const SizedBox(height: 8),
-            DashboardTile(
-              icon: Icons.outgoing_mail,
-              title: 'Email settings',
-              subtitle: 'School SMTP details used for all notifications',
-              onTap: () => context.go(Routes.adminEmailSettings),
-            ),
-            const SizedBox(height: 8),
-            StreamBuilder<List<SchoolClass>>(
-              stream: db.watchClasses(),
-              builder: (context, snap) => DashboardTile(
-                icon: Icons.meeting_room_outlined,
-                title: 'Classes',
-                subtitle: '${snap.data?.length ?? 0} classes',
-                onTap: () => context.go(Routes.adminClasses),
-              ),
-            ),
-            const SizedBox(height: 8),
-            StreamBuilder<List<AppUser>>(
-              stream: db.watchUsersByRole(UserRole.teacher),
-              builder: (context, snap) => DashboardTile(
-                icon: Icons.badge_outlined,
-                title: 'Teachers & staff',
-                subtitle: '${snap.data?.length ?? 0} teachers on the team',
-                onTap: () => context.go(Routes.adminStaff),
-              ),
-            ),
-            const SizedBox(height: 8),
-            DashboardTile(
-              icon: Icons.chat_outlined,
-              title: 'Messages',
-              subtitle: 'Staff chat',
-              onTap: () => context.go(Routes.chats),
-            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Responsive grid of headline numbers.
+class _StatGrid extends StatelessWidget {
+  const _StatGrid({required this.db});
+  final FirestoreService db;
+
+  @override
+  Widget build(BuildContext context) {
+    final columns = context.isMobile ? 2 : (context.isDesktop ? 4 : 3);
+    return StreamBuilder<List<Learner>>(
+      stream: db.watchLearners(),
+      builder: (context, learnerSnap) {
+        final learners = learnerSnap.data ?? const <Learner>[];
+        final enrolled =
+            learners.where((l) => l.status == LearnerStatus.active).length;
+        final inSchool = learners.where((l) => l.isInSchool).length;
+        return StreamBuilder<List<SchoolClass>>(
+          stream: db.watchClasses(),
+          builder: (context, classSnap) {
+            return StreamBuilder<List<AppUser>>(
+              stream: db.watchStaff(),
+              builder: (context, staffSnap) {
+                final stats = <_Stat>[
+                  _Stat('Learners enrolled', '$enrolled',
+                      Icons.child_care_outlined, Colors.indigo,
+                      route: Routes.adminLearners),
+                  _Stat('In school now', '$inSchool',
+                      Icons.how_to_reg_outlined, Colors.green,
+                      route: Routes.scan),
+                  _Stat('Classes', '${classSnap.data?.length ?? 0}',
+                      Icons.meeting_room_outlined, Colors.teal,
+                      route: Routes.adminClasses),
+                  _Stat('Staff', '${staffSnap.data?.length ?? 0}',
+                      Icons.badge_outlined, Colors.deepPurple,
+                      route: Routes.adminStaff),
+                ];
+                return GridView.count(
+                  crossAxisCount: columns,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 1.7,
+                  children: stats.map((s) => _StatCard(stat: s)).toList(),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _Stat {
+  const _Stat(this.label, this.value, this.icon, this.colour,
+      {required this.route});
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color colour;
+  final String route;
+}
+
+class _StatCard extends StatelessWidget {
+  const _StatCard({required this.stat});
+  final _Stat stat;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => context.go(stat.route),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: stat.colour.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(stat.icon, size: 18, color: stat.colour),
+              ),
+              const SizedBox(height: 10),
+              Text(stat.value,
+                  style: const TextStyle(
+                      fontSize: 26, fontWeight: FontWeight.w800)),
+              Text(stat.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: Colors.grey)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Only the things with outstanding work, so the list is empty on a quiet day.
+class _AttentionList extends StatelessWidget {
+  const _AttentionList({required this.db});
+  final FirestoreService db;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<EnrollmentApplication>>(
+      stream: db.watchApplications(),
+      builder: (context, appSnap) {
+        final open = (appSnap.data ?? [])
+            .where((a) =>
+                a.status == ApplicationStatus.submitted ||
+                a.status == ApplicationStatus.underReview)
+            .length;
+        return StreamBuilder<List<PaymentRecord>>(
+          stream: db.watchPayments(),
+          builder: (context, paySnap) {
+            final pending = (paySnap.data ?? [])
+                .where((p) => p.status == PaymentStatus.pending)
+                .length;
+            return StreamBuilder<List<ChatThread>>(
+              stream: db.watchPendingChatRequests(),
+              builder: (context, chatSnap) {
+                final requests = chatSnap.data?.length ?? 0;
+                return StreamBuilder<List<Learner>>(
+                  stream: db.watchLearners(),
+                  builder: (context, learnerSnap) {
+                    final unassigned = (learnerSnap.data ?? [])
+                        .where((l) =>
+                            l.status == LearnerStatus.active &&
+                            (l.classId == null || l.classId!.isEmpty))
+                        .length;
+
+                    final rows = <Widget>[
+                      if (open > 0)
+                        DashboardTile(
+                          icon: Icons.assignment_outlined,
+                          title: 'Applications to review',
+                          subtitle: 'Submitted or under review',
+                          badge: '$open',
+                          onTap: () => context.go(Routes.adminApplications),
+                        ),
+                      if (pending > 0)
+                        DashboardTile(
+                          icon: Icons.receipt_long_outlined,
+                          title: 'Payments awaiting approval',
+                          subtitle: 'Proof of payment submitted by parents',
+                          badge: '$pending',
+                          onTap: () => context.go(Routes.adminPayments),
+                        ),
+                      if (requests > 0)
+                        DashboardTile(
+                          icon: Icons.mark_chat_unread_outlined,
+                          title: 'Parent chat requests',
+                          subtitle: 'Waiting for your approval',
+                          badge: '$requests',
+                          onTap: () => context.go(Routes.adminChatRequests),
+                        ),
+                      if (unassigned > 0)
+                        DashboardTile(
+                          icon: Icons.child_care_outlined,
+                          title: 'Learners without a class',
+                          subtitle: 'Assign them to a register group',
+                          badge: '$unassigned',
+                          onTap: () => context.go(Routes.adminLearners),
+                        ),
+                    ];
+
+                    if (rows.isEmpty) {
+                      return Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.verified_outlined,
+                                  color: Colors.green),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                    'All caught up — nothing is waiting on '
+                                    'you right now.',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+                    return Column(
+                      children: rows
+                          .map((r) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: r))
+                          .toList(),
+                    );
+                  },
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+/// The handful of things an admin starts most often.
+class _QuickActions extends StatelessWidget {
+  const _QuickActions();
+
+  @override
+  Widget build(BuildContext context) {
+    const actions = <(String, IconData, String)>[
+      ('Add a learner', Icons.person_add_alt, Routes.adminLearners),
+      ('Create a class', Icons.add_business, Routes.adminClasses),
+      ('Add staff', Icons.badge_outlined, Routes.adminStaff),
+      ('Send a broadcast', Icons.campaign_outlined, Routes.adminBroadcasts),
+      ('Record a payment', Icons.request_quote_outlined, Routes.adminFees),
+      ('Progress reports', Icons.insights_outlined, Routes.adminProgress),
+      ('Scan attendance', Icons.qr_code_scanner, Routes.scan),
+      ('School calendar', Icons.calendar_month_outlined, Routes.calendar),
+    ];
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: actions
+          .map((a) => ActionChip(
+                avatar: Icon(a.$2, size: 18),
+                label: Text(a.$1),
+                onPressed: () => context.go(a.$3),
+              ))
+          .toList(),
     );
   }
 }
