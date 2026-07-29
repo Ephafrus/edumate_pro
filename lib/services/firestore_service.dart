@@ -8,6 +8,7 @@ import '../models/activity_log.dart';
 import '../models/app_user.dart';
 import '../models/application.dart';
 import '../models/attendance.dart';
+import 'fees_service.dart';
 import '../models/broadcast.dart';
 import '../models/calendar_event.dart';
 import '../models/chat.dart';
@@ -768,8 +769,103 @@ class FirestoreService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
     await batch.commit();
+
+    // Lay the year's fees out immediately, so the parent can see the plan
+    // from the day the child is enrolled rather than at the first invoice.
+    try {
+      await raiseInvoicesForLearner(learner);
+    } catch (_) {
+      // Never fail an enrolment over billing; the monthly run will catch up.
+    }
     return learnerRef.id;
   }
+
+  // ---- Invoices ------------------------------------------------------------
+
+  Stream<List<Invoice>> watchInvoices() =>
+      _col(Collections.invoices).snapshots().map((s) =>
+          s.docs.map(Invoice.fromDoc).toList()
+            ..sort((a, b) => a.period.compareTo(b.period)));
+
+  Stream<List<Invoice>> watchInvoicesForLearner(String learnerId) =>
+      _col(Collections.invoices)
+          .where('learnerId', isEqualTo: learnerId)
+          .snapshots()
+          .map((s) => s.docs.map(Invoice.fromDoc).toList()
+            ..sort((a, b) => a.period.compareTo(b.period)));
+
+  /// Every invoice raised against this parent's children.
+  Stream<List<Invoice>> watchInvoicesForParent(String parentUid) =>
+      _col(Collections.invoices)
+          .where('parentUids', arrayContains: parentUid)
+          .snapshots()
+          .map((s) => s.docs.map(Invoice.fromDoc).toList()
+            ..sort((a, b) => a.period.compareTo(b.period)));
+
+  /// Writes a learner's whole schedule for [year].
+  ///
+  /// Uses `set` at the deterministic id rather than `add`, so running this
+  /// again — on enrolment, at the start of a month, from two devices at once —
+  /// re-states the same invoices instead of duplicating them.
+  Future<int> raiseInvoicesForLearner(Learner learner, {int? year}) async {
+    final fees = await watchFeeStructures().first;
+    final schedule = FeesService.scheduleForLearner(
+      learner: learner,
+      fees: fees,
+      year: year ?? DateTime.now().year,
+    );
+    if (schedule.isEmpty) return 0;
+    final batch = _db.batch();
+    for (final invoice in schedule) {
+      batch.set(_col(Collections.invoices).doc(invoice.id), invoice.toMap(),
+          SetOptions(merge: true));
+    }
+    await batch.commit();
+    return schedule.length;
+  }
+
+  /// Makes sure every enrolled learner has their invoices for [year].
+  ///
+  /// There is no server to run this on a schedule, so it is triggered when a
+  /// manager opens the finance area: the first staff session in a new month
+  /// raises that month's invoices. Idempotent ids make the timing irrelevant —
+  /// running it every load is harmless.
+  Future<int> ensureInvoicesForYear({int? year}) async {
+    final target = year ?? DateTime.now().year;
+    final fees = await watchFeeStructures().first;
+    if (fees.isEmpty) return 0;
+    final learners = await watchLearners().first;
+    final active =
+        learners.where((l) => l.status == LearnerStatus.active).toList();
+    if (active.isEmpty) return 0;
+
+    final existing = await _col(Collections.invoices).get();
+    final have = existing.docs.map((d) => d.id).toSet();
+
+    var written = 0;
+    var batch = _db.batch();
+    var inBatch = 0;
+    for (final learner in active) {
+      final schedule = FeesService.scheduleForLearner(
+          learner: learner, fees: fees, year: target);
+      for (final invoice in schedule) {
+        if (have.contains(invoice.id)) continue;
+        batch.set(_col(Collections.invoices).doc(invoice.id), invoice.toMap());
+        written++;
+        // Firestore caps a batch at 500 writes.
+        if (++inBatch == 450) {
+          await batch.commit();
+          batch = _db.batch();
+          inBatch = 0;
+        }
+      }
+    }
+    if (inBatch > 0) await batch.commit();
+    return written;
+  }
+
+  Future<void> deleteInvoice(String id) =>
+      _col(Collections.invoices).doc(id).delete();
 
   // ---- Payments ------------------------------------------------------------
 
@@ -803,6 +899,66 @@ class FirestoreService {
         'reviewedByName': byName,
         'reviewedAt': FieldValue.serverTimestamp(),
       });
+
+  /// Approves several payments at once — the principal's end-of-day pass over
+  /// the office's receipts.
+  ///
+  /// Reports how many went through rather than failing the lot: one payment
+  /// that has been edited underneath should not block the rest.
+  Future<({int approved, int failed})> approvePayments(
+    List<String> paymentIds, {
+    String byName = '',
+    String note = '',
+  }) async {
+    var approved = 0;
+    var failed = 0;
+    for (final id in paymentIds) {
+      try {
+        await reviewPayment(id, PaymentStatus.approved,
+            note: note, byName: byName);
+        approved++;
+      } catch (_) {
+        failed++;
+      }
+    }
+    return (approved: approved, failed: failed);
+  }
+
+  /// Records a payment taken at the office.
+  ///
+  /// A principal's own entry is approved as it is written — they are the
+  /// approving authority, so asking them to approve themselves afterwards
+  /// would be theatre. Anyone else's waits for them.
+  Future<void> recordPayment(
+    PaymentRecord payment, {
+    required bool byPrincipal,
+    String byName = '',
+  }) async {
+    final settled = byPrincipal
+        ? PaymentRecord(
+            id: payment.id,
+            parentUid: payment.parentUid,
+            parentName: payment.parentName,
+            learnerId: payment.learnerId,
+            learnerName: payment.learnerName,
+            purpose: payment.purpose,
+            method: payment.method,
+            amountCents: payment.amountCents,
+            reference: payment.reference,
+            paymentDate: payment.paymentDate,
+            notes: payment.notes,
+            proofUrl: payment.proofUrl,
+            proofFilename: payment.proofFilename,
+            status: PaymentStatus.approved,
+            reviewNote: 'Recorded and approved by the principal',
+            reviewedByName: byName,
+            reviewedAt: DateTime.now(),
+            source: payment.source,
+            feeStructureId: payment.feeStructureId,
+          )
+        : payment;
+    await _col(Collections.payments).add(settled.toMap());
+  }
 
   // ---- Chat ----------------------------------------------------------------
 

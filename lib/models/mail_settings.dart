@@ -7,6 +7,24 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 ///
 /// Staff can read the settings (teachers' attendance scans send email too);
 /// only admins may change them.
+/// How the school's mail actually leaves the building.
+enum MailTransport {
+  /// A direct SMTP connection. Works on mobile and desktop only — a browser
+  /// cannot open a socket to port 587, and no setting changes that.
+  smtp,
+
+  /// An HTTPS endpoint the school owns that accepts a JSON message and sends
+  /// it. This is what lets the **web portal** send mail: the browser can make
+  /// an ordinary HTTPS request even though it can never speak SMTP.
+  relay;
+
+  static MailTransport fromString(String? s) =>
+      s == 'relay' ? MailTransport.relay : MailTransport.smtp;
+
+  String get label =>
+      this == MailTransport.relay ? 'HTTPS relay (works on the web)' : 'SMTP';
+}
+
 class MailSettings {
   const MailSettings({
     this.host = '',
@@ -15,6 +33,9 @@ class MailSettings {
     this.password = '',
     this.fromName = '',
     this.fromAddress = '',
+    this.transport = MailTransport.smtp,
+    this.relayUrl = '',
+    this.relayToken = '',
   });
 
   final String host;
@@ -26,11 +47,24 @@ class MailSettings {
   final String fromName;
   final String fromAddress;
 
-  bool get isComplete =>
-      host.isNotEmpty &&
-      username.isNotEmpty &&
-      password.isNotEmpty &&
-      fromAddress.isNotEmpty;
+  final MailTransport transport;
+
+  /// Endpoint that receives `{to, subject, text, html, fromName, fromAddress}`
+  /// as JSON and sends the message.
+  final String relayUrl;
+
+  /// Sent as `Authorization: Bearer <token>` when set, so the school's relay
+  /// is not left open to anyone who finds the URL.
+  final String relayToken;
+
+  bool get usesRelay => transport == MailTransport.relay;
+
+  bool get isComplete => usesRelay
+      ? relayUrl.isNotEmpty && fromAddress.isNotEmpty
+      : host.isNotEmpty &&
+          username.isNotEmpty &&
+          password.isNotEmpty &&
+          fromAddress.isNotEmpty;
 
   Map<String, dynamic> toMap() => {
         'host': host.trim(),
@@ -39,6 +73,9 @@ class MailSettings {
         'password': password,
         'fromName': fromName.trim(),
         'fromAddress': fromAddress.trim(),
+        'transport': transport.name,
+        'relayUrl': relayUrl.trim(),
+        'relayToken': relayToken.trim(),
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
@@ -51,6 +88,9 @@ class MailSettings {
       password: (m['password'] ?? '') as String,
       fromName: (m['fromName'] ?? '') as String,
       fromAddress: (m['fromAddress'] ?? '') as String,
+      transport: MailTransport.fromString(m['transport'] as String?),
+      relayUrl: (m['relayUrl'] ?? '') as String,
+      relayToken: (m['relayToken'] ?? '') as String,
     );
   }
 }

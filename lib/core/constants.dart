@@ -32,6 +32,7 @@ class Collections {
   static const broadcasts = 'broadcasts';
   static const events = 'events';
   static const feeStructures = 'feeStructures';
+  static const invoices = 'invoices';
   static const paymentImports = 'paymentImports';
   static const activity = 'activity';
 }

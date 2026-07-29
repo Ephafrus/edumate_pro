@@ -286,18 +286,45 @@ service cloud.firestore {
       }
 
       // ---- Payments & fees ---------------------------------------------------
+      // Approving money is the principal's signature, so the rules enforce
+      // it rather than trusting the UI to hide a button: an office admin can
+      // record a receipt but it stays pending until the principal signs it
+      // off. A principal recording one may write it approved directly.
+      function approvesPayments(schoolId) {
+        return isSignedIn()
+               && (isSuperAdmin()
+                   || (exists(memberPath(schoolId))
+                       && myRole(schoolId) == 'principal'));
+      }
+      function paymentStaysPending() {
+        return request.resource.data.status == 'pending';
+      }
       match /payments/{id} {
         allow read: if isManager(schoolId)
                     || (isSignedIn()
                         && resource.data.parentUid == request.auth.uid);
-        allow create: if isManager(schoolId)
+        allow create: if approvesPayments(schoolId)
+                    || (isManager(schoolId) && paymentStaysPending())
                     || (isParentAt(schoolId)
                         && request.resource.data.parentUid == request.auth.uid
-                        && request.resource.data.status == 'pending');
-        allow update, delete: if isManager(schoolId);
+                        && paymentStaysPending());
+        // A manager may correct a pending payment's details; only the
+        // principal may change what its status says.
+        allow update: if approvesPayments(schoolId)
+                    || (isManager(schoolId)
+                        && request.resource.data.status == resource.data.status);
+        allow delete: if isManager(schoolId);
       }
       match /feeStructures/{id} {
         allow read: if isMember(schoolId);
+        allow write: if isManager(schoolId);
+      }
+      // Invoices are the school's charges. Staff raise them; a parent reads
+      // only the ones raised against their own children.
+      match /invoices/{id} {
+        allow read: if isStaff(schoolId)
+                    || (isSignedIn()
+                        && request.auth.uid in resource.data.parentUids);
         allow write: if isManager(schoolId);
       }
       match /paymentImports/{id} {

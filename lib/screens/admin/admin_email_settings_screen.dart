@@ -30,6 +30,11 @@ class _AdminEmailSettingsScreenState extends State<AdminEmailSettingsScreen> {
   final _password = TextEditingController();
   final _fromName = TextEditingController();
   final _fromAddress = TextEditingController();
+  final _relayUrl = TextEditingController();
+  final _relayToken = TextEditingController();
+  MailTransport _transport = MailTransport.smtp;
+  String? _testResult;
+  bool _testOk = false;
   bool _loading = true;
   bool _saving = false;
   bool _obscure = true;
@@ -51,6 +56,9 @@ class _AdminEmailSettingsScreenState extends State<AdminEmailSettingsScreen> {
       _password.text = s.password;
       _fromName.text = s.fromName;
       _fromAddress.text = s.fromAddress;
+      _relayUrl.text = s.relayUrl;
+      _relayToken.text = s.relayToken;
+      _transport = s.transport;
     }
     if (mounted) setState(() => _loading = false);
   }
@@ -58,7 +66,7 @@ class _AdminEmailSettingsScreenState extends State<AdminEmailSettingsScreen> {
   @override
   void dispose() {
     for (final c in [_host, _port, _username, _password, _fromName,
-        _fromAddress]) {
+        _fromAddress, _relayUrl, _relayToken]) {
       c.dispose();
     }
     super.dispose();
@@ -71,6 +79,9 @@ class _AdminEmailSettingsScreenState extends State<AdminEmailSettingsScreen> {
         password: _password.text,
         fromName: _fromName.text.trim(),
         fromAddress: _fromAddress.text.trim(),
+        transport: _transport,
+        relayUrl: _relayUrl.text.trim(),
+        relayToken: _relayToken.text.trim(),
       );
 
   Future<void> _save() async {
@@ -96,11 +107,23 @@ class _AdminEmailSettingsScreenState extends State<AdminEmailSettingsScreen> {
       showSnack(context, 'Add an email address to your own profile first.');
       return;
     }
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _testResult = null;
+    });
     try {
       await db.setMailSettings(_current());
-      final outcome = await mailer.sendTest(to);
-      if (mounted) showSnack(context, 'Test to $to: ${outcome.label}');
+      // verify() reports the provider's own words; send() would swallow
+      // them into a generic outcome, which is useless when the whole point
+      // is finding out what is wrong.
+      final result = await mailer.verify(to);
+      if (!mounted) return;
+      setState(() {
+        _testOk = result.ok;
+        _testResult = result.ok
+            ? 'Sent to $to. Check the inbox — and the spam folder.'
+            : result.message;
+      });
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -129,7 +152,7 @@ class _AdminEmailSettingsScreenState extends State<AdminEmailSettingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('School email (SMTP)',
+              Text('School email',
                   style: Theme.of(context)
                       .textTheme
                       .headlineSmall
@@ -137,12 +160,104 @@ class _AdminEmailSettingsScreenState extends State<AdminEmailSettingsScreen> {
               const SizedBox(height: 4),
               Text(
                   'Notifications to parents (applications, payments, '
-                  'attendance and broadcasts) are sent from the app using '
-                  'these details. Any SMTP provider works — your school '
-                  'mail host, Gmail/Workspace with an app password, '
-                  'SendGrid, etc.',
+                  'attendance, invoices and broadcasts) are sent from the '
+                  'app using these details.',
                   style: Theme.of(context).textTheme.bodySmall),
               const SizedBox(height: 16),
+              SectionCard(
+                title: 'How mail leaves the school',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SegmentedButton<MailTransport>(
+                      segments: const [
+                        ButtonSegment(
+                            value: MailTransport.smtp,
+                            icon: Icon(Icons.dns_outlined),
+                            label: Text('SMTP')),
+                        ButtonSegment(
+                            value: MailTransport.relay,
+                            icon: Icon(Icons.http),
+                            label: Text('HTTPS relay')),
+                      ],
+                      selected: {_transport},
+                      onSelectionChanged: (v) =>
+                          setState(() => _transport = v.first),
+                    ),
+                    const SizedBox(height: 12),
+                    if (_transport == MailTransport.smtp)
+                      const _Note(
+                        icon: Icons.warning_amber_outlined,
+                        colour: Colors.orange,
+                        text: 'SMTP cannot be used from this web portal — no '
+                            'browser can open a connection to a mail server. '
+                            'Messages composed here are queued and sent the '
+                            'next time somebody opens the mobile or desktop '
+                            'app. To send from the web, use an HTTPS relay.',
+                      )
+                    else
+                      const _Note(
+                        icon: Icons.check_circle_outline,
+                        colour: Colors.green,
+                        text: 'A relay is an HTTPS endpoint your school owns '
+                            'that receives a message and sends it. This is '
+                            'what lets the web portal send mail directly. A '
+                            'Google Apps Script web app sending through the '
+                            "school's own Gmail is the cheapest option; see "
+                            'docs/email-relay.md for one you can paste in.',
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (_transport == MailTransport.relay) ...[
+                SectionCard(
+                  title: 'Relay endpoint',
+                  child: Column(
+                    children: [
+                      TextFormField(
+                        controller: _relayUrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Relay URL',
+                          hintText: 'https://script.google.com/macros/s/…/exec',
+                          helperText:
+                              'Must be https and must allow requests from '
+                              'this site',
+                        ),
+                        validator: (v) {
+                          if (_transport != MailTransport.relay) return null;
+                          final t = (v ?? '').trim();
+                          if (t.isEmpty) return 'The relay URL is required';
+                          if (!t.startsWith('https://')) {
+                            return 'Must start with https://';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _relayToken,
+                        decoration: const InputDecoration(
+                          labelText: 'Shared secret (optional)',
+                          helperText: 'Sent as a bearer token so the endpoint '
+                              'is not open to anyone who finds the URL',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+              if (_testResult != null) ...[
+                _Note(
+                  icon: _testOk
+                      ? Icons.mark_email_read_outlined
+                      : Icons.error_outline,
+                  colour: _testOk ? Colors.green : Colors.red,
+                  text: _testResult!,
+                ),
+                const SizedBox(height: 16),
+              ],
               SectionCard(
                 title: 'SMTP server',
                 child: Column(
@@ -298,6 +413,37 @@ class _AdminEmailSettingsScreenState extends State<AdminEmailSettingsScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A short explanatory panel — used where the difference between transports
+/// decides whether mail leaves the building at all.
+class _Note extends StatelessWidget {
+  const _Note({required this.icon, required this.colour, required this.text});
+  final IconData icon;
+  final Color colour;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colour.withValues(alpha: 0.08),
+        border: Border.all(color: colour.withValues(alpha: 0.35)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: colour),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(text, style: Theme.of(context).textTheme.bodySmall),
+          ),
+        ],
       ),
     );
   }

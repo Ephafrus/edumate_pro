@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 
 import '../models/application.dart';
 import '../models/enums.dart';
+import '../models/mail_settings.dart';
 import 'firestore_service.dart';
+import 'mail_relay.dart';
 import 'smtp/smtp_sender_stub.dart'
     if (dart.library.io) 'smtp/smtp_sender_io.dart';
 
@@ -14,8 +16,9 @@ enum MailOutcome {
   /// admin completes Email settings.
   notConfigured,
 
-  /// Sent from a browser: queued to the outbox, delivered when a staff
-  /// member opens the app on a platform that can speak SMTP.
+  /// Composed in a browser with only SMTP configured: queued to the outbox
+  /// and delivered when a staff member opens the app on a platform that can
+  /// speak SMTP. Configure an HTTPS relay to send from the web instead.
   queuedOnWeb,
   failed;
 
@@ -24,9 +27,10 @@ enum MailOutcome {
       case MailOutcome.sent:
         return 'email sent';
       case MailOutcome.notConfigured:
-        return 'email queued (SMTP not configured yet)';
+        return 'email queued (email is not configured yet)';
       case MailOutcome.queuedOnWeb:
-        return 'email queued (sends from the mobile/desktop app)';
+        return 'email queued — the web portal cannot speak SMTP; set up an '
+            'HTTPS relay under Email settings to send from here';
       case MailOutcome.failed:
         return 'email failed — see the outbox';
     }
@@ -61,13 +65,17 @@ class MailService {
           to: to, subject: subject, text: text, html: html, status: 'pending');
       return MailOutcome.notConfigured;
     }
-    if (kIsWeb || !smtpSupported) {
+    // A browser can never open an SMTP socket, but it can make an HTTPS
+    // request — so the relay is what makes the web portal able to send.
+    final canSendHere = settings.usesRelay || (!kIsWeb && smtpSupported);
+    if (!canSendHere) {
       await _db.logMail(
           to: to, subject: subject, text: text, html: html, status: 'pending');
       return MailOutcome.queuedOnWeb;
     }
     try {
-      await smtpSend(settings, to: to, subject: subject, text: text, html: html);
+      await _deliver(settings,
+          to: to, subject: subject, text: text, html: html);
       await _db.logMail(
           to: to, subject: subject, text: text, html: html, status: 'sent');
       return MailOutcome.sent;
@@ -83,6 +91,69 @@ class MailService {
     }
   }
 
+  Future<void> _deliver(
+    MailSettings settings, {
+    required String to,
+    required String subject,
+    required String text,
+    String? html,
+  }) =>
+      settings.usesRelay
+          ? MailRelay.send(settings,
+              to: to, subject: subject, text: text, html: html)
+          : smtpSend(settings,
+              to: to, subject: subject, text: text, html: html);
+
+  /// Sends a test message and reports the **actual** reason it failed.
+  ///
+  /// [send] deliberately swallows the error into an outcome so a status
+  /// change is never blocked by mail. When an admin is deliberately testing
+  /// their settings, the opposite is true: the provider's own words are the
+  /// entire point.
+  Future<({bool ok, String message})> verify(String to) async {
+    if (to.trim().isEmpty) {
+      return (ok: false, message: 'Enter an address to send the test to.');
+    }
+    final settings = await _db.getMailSettings();
+    if (settings == null || !settings.isComplete) {
+      return (
+        ok: false,
+        message: 'Email is not configured yet — fill in the settings below '
+            'and save before testing.'
+      );
+    }
+    if (!settings.usesRelay && (kIsWeb || !smtpSupported)) {
+      return (
+        ok: false,
+        message: 'This is the web portal, which cannot open an SMTP '
+            'connection — no browser can. Switch the transport to HTTPS '
+            'relay to send from here, or test from the mobile/desktop app.'
+      );
+    }
+    try {
+      await _deliver(settings,
+          to: to,
+          subject: 'EduMate Pro — test email',
+          text: 'Your school email settings are working. This is a test '
+              'message from EduMate Pro.');
+      await _db.logMail(
+          to: to,
+          subject: 'EduMate Pro — test email',
+          text: 'Test message',
+          status: 'sent');
+      return (ok: true, message: 'Test email sent to $to.');
+    } catch (e) {
+      final reason = e is MailRelayException ? e.message : '$e';
+      await _db.logMail(
+          to: to,
+          subject: 'EduMate Pro — test email',
+          text: 'Test message',
+          status: 'error',
+          error: reason);
+      return (ok: false, message: reason);
+    }
+  }
+
   /// Sends a test message to verify the captured SMTP settings.
   Future<MailOutcome> sendTest(String to) => send(
         to: to,
@@ -94,16 +165,19 @@ class MailService {
   /// Retries queued/errored outbox messages. No-op on web (can't send) and
   /// while another flush is running. Returns how many were sent.
   Future<int> flushOutbox() async {
-    if (kIsWeb || !smtpSupported || _flushing) return 0;
+    if (_flushing) return 0;
     final settings = await _db.getMailSettings();
     if (settings == null || !settings.isComplete) return 0;
+    // With a relay the web portal can clear the backlog too — which is the
+    // point of having one.
+    if (!settings.usesRelay && (kIsWeb || !smtpSupported)) return 0;
     _flushing = true;
     var sent = 0;
     try {
       final pending = await _db.getUnsentMail(limit: 25);
       for (final m in pending) {
         try {
-          await smtpSend(settings,
+          await _deliver(settings,
               to: m.to, subject: m.subject, text: m.text, html: m.html);
           await _db.markMail(m.id, 'sent');
           sent++;
