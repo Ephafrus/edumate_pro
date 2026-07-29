@@ -96,6 +96,61 @@ firestore.rules / storage.rules   security rules
    default. Assignments take effect immediately — the recipient's app is
    watching their memberships live.
 
+### How the first Super Admin actually works
+
+There is no seed script and no magic phone number. On sign-in the app tries
+to create `platform/config` naming itself:
+
+```
+platform/config
+  bootstrapped      true
+  firstSuperAdminUid <your uid>
+  createdAt         <server timestamp>
+```
+
+The rules let **any** signed-in user create that document, but only with
+their *own* uid in `firstSuperAdminUid`, and once it exists only a Super
+Admin can change it. So the claim is first-come, once-only. Holding the
+claim is also the one condition under which `users/{uid}` may set
+`superAdmin: true` on itself — that is the whole bootstrap.
+
+The claim is idempotent: if you hold it but the promotion did not finish,
+signing in again completes it. It also works for an account that existed
+*before* the rules were deployed — sign out and back in.
+
+### If the first sign-in did not make you Super Admin
+
+Check these in order:
+
+1. **Are the rules deployed?** `firebase deploy --only firestore`. Without
+   them the claim write is denied and *nobody* can ever become Super Admin.
+   This is by far the most common cause. Deploy, then sign out and in again.
+2. **Has somebody else already claimed it?** Open `platform/config` in the
+   Firestore console and compare `firstSuperAdminUid` with your uid
+   (Firebase console → Authentication → Users). A throwaway test number
+   signing in first will have taken it.
+3. **Did the promotion land?** `users/{your uid}` should have
+   `superAdmin: true`. When it does, the sidebar shows a **Platform**
+   section (Schools · Users · System log) and home is `/super`.
+
+To set it by hand — console writes bypass the rules, so this always works:
+
+1. Sign in once with the number so `users/{uid}` exists, and copy the uid
+   from Firebase console → Authentication → Users.
+2. Firestore → create collection `platform`, document id `config`, with
+   `bootstrapped` (boolean) `true` and `firstSuperAdminUid` (string) set to
+   that uid.
+3. Firestore → `users/{uid}` → add `superAdmin` (boolean) `true`.
+4. Sign out and sign back in.
+
+The same two edits move the role to a different account. Once you have one
+Super Admin, grant the rest in-app from **Platform → Users**; never hand out
+Super Admin by editing the console again.
+
+Note that Super Admin is a **platform** flag on `users/{uid}`, not a school
+membership — a Super Admin holds no member document anywhere, which is why
+the rules give them an explicit bypass on school-scoped data.
+
 ## Phone authentication (SMS) setup
 
 Everyone signs in by phone (OTP). **A brand-new Firebase project will not send
