@@ -7,6 +7,8 @@ import '../../models/app_user.dart';
 import '../../models/broadcast.dart';
 import '../../models/enums.dart';
 import '../../models/school.dart';
+import '../../models/activity_log.dart';
+import '../../services/activity_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/mail_service.dart';
 import '../../state/auth_controller.dart';
@@ -222,6 +224,11 @@ class _ComposeBroadcastDialogState extends State<_ComposeBroadcastDialog> {
       }
       await db.updateBroadcast(
           id, {'emailsSent': sent, 'emailsFailed': failed});
+      if (mounted) {
+        context.read<ActivityService>().log(ActivityAction.broadcastSent,
+            target: _subject.text.trim(),
+            details: '${recipients.length} recipient(s) · $sent emailed');
+      }
 
       if (!mounted) return;
       Navigator.of(context).pop();

@@ -5,6 +5,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/responsive.dart';
 import '../../models/application.dart';
 import '../../models/enums.dart';
+import '../../models/activity_log.dart';
+import '../../services/activity_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/mail_service.dart';
 import '../../state/auth_controller.dart';
@@ -24,6 +26,7 @@ class AdminApplicationDetailScreen extends StatelessWidget {
       ApplicationStatus status) async {
     final db = context.read<FirestoreService>();
     final mail = context.read<MailService>();
+    final activity = context.read<ActivityService>();
     final byName = context.read<AuthController>().appUser?.fullName ?? '';
 
     String note = '';
@@ -44,8 +47,12 @@ class AdminApplicationDetailScreen extends StatelessWidget {
       );
       if (!ok) return;
       await db.enrollApplication(app, byName: byName);
+      activity.log(ActivityAction.learnerEnrolled,
+          target: app.learnerFullName, details: app.gradeApplyingFor);
     } else {
       await db.setApplicationStatus(app, status, note: note, byName: byName);
+      activity.log(ActivityAction.applicationStatusChanged,
+          target: app.learnerFullName, details: status.label);
     }
 
     // Notify the guardian over the school's SMTP.

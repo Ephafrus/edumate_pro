@@ -4,6 +4,11 @@ class Collections {
   /// Global (platform-level) collections.
   static const users = 'users';
   static const schools = 'schools';
+  static const activityLogs = 'activityLogs';
+
+  /// Single doc `platform/config` claimed by the very first user, which is
+  /// how a brand-new deployment gets its first Super Admin.
+  static const platform = 'platform';
   static const staffInvites = 'staffInvites';
 
   /// Per-school subcollection of `schools/{schoolId}`.

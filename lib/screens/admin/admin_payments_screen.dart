@@ -5,6 +5,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/responsive.dart';
 import '../../models/enums.dart';
 import '../../models/payment.dart';
+import '../../models/activity_log.dart';
+import '../../services/activity_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/mail_service.dart';
 import '../../state/auth_controller.dart';
@@ -60,6 +62,11 @@ class _AdminPaymentsScreenState extends State<AdminPaymentsScreen> {
     }
 
     await db.reviewPayment(p.id, status, note: note, byName: byName);
+    if (mounted) {
+      context.read<ActivityService>().log(ActivityAction.paymentReviewed,
+          target: p.parentName.isEmpty ? p.purpose : p.parentName,
+          details: '${status.label} · ${p.amountLabel}');
+    }
 
     // Notify the parent over the school's SMTP.
     var mailNote = '';

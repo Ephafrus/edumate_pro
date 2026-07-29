@@ -7,6 +7,8 @@ import '../../core/id_validation.dart';
 import '../../core/responsive.dart';
 import '../../models/enums.dart';
 import '../../router/app_router.dart';
+import '../../models/activity_log.dart';
+import '../../services/activity_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/storage_service.dart';
 import '../../state/auth_controller.dart';
@@ -82,6 +84,13 @@ class _ApplicationWizardScreenState extends State<ApplicationWizardScreen> {
   @override
   void initState() {
     super.initState();
+    // Records that the parent opened the enrollment application.
+    context.read<ActivityService>().log(
+          ActivityAction.applyPageOpened,
+          details: widget.applicationId == null
+              ? 'new application'
+              : 'resumed draft',
+        );
     _load();
   }
 
@@ -231,6 +240,7 @@ class _ApplicationWizardScreenState extends State<ApplicationWizardScreen> {
 
   Future<void> _submit() async {
     final db = context.read<FirestoreService>();
+    final activity = context.read<ActivityService>();
     final user = context.read<AuthController>().appUser!;
     setState(() => _saving = true);
     try {
@@ -239,6 +249,8 @@ class _ApplicationWizardScreenState extends State<ApplicationWizardScreen> {
       if (app == null) return;
       await db.setApplicationStatus(app, ApplicationStatus.submitted,
           note: 'Application submitted', byName: user.fullName);
+      activity.log(ActivityAction.applicationSubmitted,
+          target: app.learnerFullName, details: app.gradeApplyingFor);
       if (!mounted) return;
       showSnack(context, 'Application submitted — you can track it here.');
       context.go(Routes.applicationDetail(_appId!));

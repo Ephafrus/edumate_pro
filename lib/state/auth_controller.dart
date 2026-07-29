@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import '../models/activity_log.dart';
 import '../models/app_user.dart';
 import '../models/enums.dart';
 import '../models/school.dart';
+import '../services/activity_service.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 
@@ -23,14 +25,22 @@ class AuthController extends ChangeNotifier {
   AuthController({
     required AuthService authService,
     required FirestoreService firestore,
+    required ActivityService activity,
   })  : _auth = authService,
-        _db = firestore {
+        _db = firestore,
+        _activity = activity {
     _sub = _auth.authStateChanges.listen(_onAuthStateChanged);
   }
 
   final AuthService _auth;
   final FirestoreService _db;
+  final ActivityService _activity;
   StreamSubscription<User?>? _sub;
+
+  /// Live subscription to this user's school memberships, so a school
+  /// assigned by a Super Admin (or a teacher invite claimed elsewhere)
+  /// appears immediately, without needing to sign out and back in.
+  StreamSubscription<List<SchoolMembership>>? _membershipSub;
 
   AppUser? _appUser;
   List<SchoolMembership> _memberships = const [];
@@ -121,13 +131,33 @@ class AuthController extends ChangeNotifier {
     final existing = await _db.getUser(user.uid);
     if (existing != null) return existing;
 
+    // A brand-new deployment has nobody in charge yet. The first person to
+    // sign in claims the platform and becomes its Super Admin; everyone
+    // after that is a parent unless a Super Admin assigns them an admin /
+    // principal role, or a school admin invites them as a teacher.
+    final claimed = await _db.claimPlatformBootstrap(user.uid);
+
     final newUser = AppUser(
       uid: user.uid,
       role: UserRole.parent,
       phone: user.phoneNumber,
+      superAdmin: claimed,
     );
     await _db.upsertUser(newUser);
-    return _db.getUser(user.uid);
+    final created = await _db.getUser(user.uid);
+    if (claimed && created != null) {
+      _activity.log(
+        ActivityAction.platformBootstrapped,
+        target: created.phone ?? created.uid,
+        details: 'first sign-in became Super Admin',
+        as: ActivityActor.forUser(
+          uid: created.uid,
+          name: created.fullName,
+          superAdmin: true,
+        ),
+      );
+    }
+    return created;
   }
 
   /// Turns any outstanding staff invites for this phone number into school
@@ -175,20 +205,66 @@ class AuthController extends ChangeNotifier {
   }
 
   /// Loads every school this user belongs to and points the database at the
-  /// active one.
+  /// active one, then keeps watching so later changes arrive live.
   Future<void> _loadMemberships(String uid) async {
     try {
       _memberships = await _db.getMembershipsForUser(uid);
     } catch (_) {
       _memberships = const [];
     }
+    await _applyActiveSchool(uid);
+    _watchMemberships(uid);
+  }
+
+  /// Subscribes to membership changes. When a Super Admin assigns this user
+  /// to a school, or a school admin promotes them, the app picks it up
+  /// straight away and the router moves them out of "choose a school".
+  void _watchMemberships(String uid) {
+    _membershipSub?.cancel();
+    _membershipSub = _db.watchMembershipsForUser(uid).listen((list) async {
+      final hadNone = _memberships.isEmpty;
+      _memberships = list;
+      await _applyActiveSchool(uid);
+      if (hadNone && list.isNotEmpty) {
+        _refreshActor();
+        _activity.log(ActivityAction.memberAssigned,
+            target: list.first.schoolName,
+            details: 'joined as ${list.first.role.label}');
+      }
+      notifyListeners();
+    }, onError: (_) {});
+  }
+
+  /// Points the database at the active school and remembers the choice.
+  Future<void> _applyActiveSchool(String uid) async {
     final active = activeMembership;
     _db.activeSchoolId = active?.schoolId;
+    _refreshActor();
     // Persist the resolved school so the next session opens where they left.
     if (active != null && _appUser?.activeSchoolId != active.schoolId) {
-      await _db.updateUser(uid, {'activeSchoolId': active.schoolId});
+      try {
+        await _db.updateUser(uid, {'activeSchoolId': active.schoolId});
+      } catch (_) {/* non-fatal */}
       _appUser = _appUser?.copyWith(activeSchoolId: active.schoolId);
     }
+  }
+
+  /// Keeps the audit trail's "who did this" in step with the session.
+  void _refreshActor() {
+    final u = _appUser;
+    if (u == null) {
+      _activity.actor = null;
+      return;
+    }
+    final m = activeMembership;
+    _activity.actor = ActivityActor.forUser(
+      uid: u.uid,
+      name: u.fullName,
+      superAdmin: u.superAdmin,
+      role: m?.role,
+      schoolId: m?.schoolId,
+      schoolName: m?.schoolName ?? '',
+    );
   }
 
   /// Switches to another school this user belongs to.
@@ -199,6 +275,8 @@ class AuthController extends ChangeNotifier {
     await _db.updateUser(uid, {'activeSchoolId': schoolId});
     _appUser = _appUser?.copyWith(activeSchoolId: schoolId);
     _db.activeSchoolId = schoolId;
+    _refreshActor();
+    _activity.log(ActivityAction.schoolSwitched, target: activeSchoolName);
     notifyListeners();
   }
 
@@ -220,6 +298,7 @@ class AuthController extends ChangeNotifier {
         email: u.email,
       ));
       await _loadMemberships(u.uid);
+      _activity.log(ActivityAction.schoolJoined, target: school.name);
       notifyListeners();
       return true;
     } catch (e) {
@@ -312,6 +391,15 @@ class AuthController extends ChangeNotifier {
         _appUser = await _ensureUserRecord(user);
         await _claimInvites(user);
         await _loadMemberships(user.uid);
+        _refreshActor();
+        _activity.log(ActivityAction.signedIn,
+            target: _appUser?.phone ?? '',
+            details: isSuperAdmin
+                ? 'Super Admin'
+                : (activeMembership == null
+                    ? 'no school yet'
+                    : '${activeMembership!.role.label} at '
+                        '${activeMembership!.schoolName}'));
       }
       return true;
     } on FirebaseAuthException catch (e) {
@@ -354,7 +442,14 @@ class AuthController extends ChangeNotifier {
           active: m.active,
         ));
       }
+      final wasFirstTime = !(u.profileComplete);
       await refreshAppUser();
+      _activity.log(
+        wasFirstTime
+            ? ActivityAction.profileCreated
+            : ActivityAction.profileUpdated,
+        target: '${firstName.trim()} ${lastName.trim()}'.trim(),
+      );
       return true;
     } catch (e) {
       _error = e.toString();
@@ -365,14 +460,21 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    _activity.log(ActivityAction.signedOut);
+    await _membershipSub?.cancel();
+    _membershipSub = null;
     await _auth.signOut();
     _appUser = null;
+    _memberships = const [];
+    _db.activeSchoolId = null;
+    _activity.actor = null;
     notifyListeners();
   }
 
   @override
   void dispose() {
     _sub?.cancel();
+    _membershipSub?.cancel();
     super.dispose();
   }
 }

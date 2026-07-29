@@ -30,8 +30,10 @@ import '../screens/parent/application_wizard_screen.dart';
 import '../screens/parent/parent_home_screen.dart';
 import '../screens/parent/parent_payments_screen.dart';
 import '../screens/staff/scan_screen.dart';
+import '../screens/superadmin/super_activity_screen.dart';
 import '../screens/superadmin/super_school_detail_screen.dart';
 import '../screens/superadmin/super_schools_screen.dart';
+import '../screens/superadmin/super_users_screen.dart';
 import '../screens/teacher/teacher_class_screen.dart';
 import '../screens/teacher/teacher_home_screen.dart';
 import '../screens/teacher/teacher_subject_screen.dart';
@@ -71,6 +73,8 @@ class Routes {
 
   /// Super Admin console (platform level, above any school).
   static const superHome = '/super';
+  static const superUsers = '/super/users';
+  static const superActivity = '/super/activity';
   static String superSchoolDetail(String id) => '/super/schools/$id';
 
   /// Shown when a signed-in user belongs to no school yet.
@@ -198,6 +202,12 @@ GoRouter createRouter(AuthController auth) {
       GoRoute(
           path: Routes.superHome,
           builder: (_, __) => const SuperSchoolsScreen()),
+      GoRoute(
+          path: Routes.superUsers,
+          builder: (_, __) => const SuperUsersScreen()),
+      GoRoute(
+          path: Routes.superActivity,
+          builder: (_, __) => const SuperActivityScreen()),
       GoRoute(
         path: '/super/schools/:id',
         builder: (_, state) =>

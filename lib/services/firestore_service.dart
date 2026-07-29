@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/constants.dart';
 import '../models/academics.dart';
+import '../models/activity_log.dart';
 import '../models/app_user.dart';
 import '../models/application.dart';
 import '../models/attendance.dart';
@@ -41,6 +42,62 @@ class FirestoreService {
   /// A collection inside the active school.
   CollectionReference<Map<String, dynamic>> _col(String name) =>
       _schoolDoc.collection(name);
+
+  // ---- First-run bootstrap -------------------------------------------------
+
+  /// Claims the platform for the very first user, atomically.
+  ///
+  /// A brand-new deployment has no Super Admin and no schools, which would
+  /// otherwise leave the first person to sign in stuck on "choose a school"
+  /// with an empty list. The first user to get here creates
+  /// `platform/config`; because a `create` fails if the document already
+  /// exists, exactly one user can ever win this race, and they become the
+  /// platform's first Super Admin.
+  ///
+  /// Returns true if this call claimed it.
+  Future<bool> claimPlatformBootstrap(String uid) async {
+    try {
+      await _db.collection(Collections.platform).doc('config').set(
+        {
+          'bootstrapped': true,
+          'firstSuperAdminUid': uid,
+          'createdAt': FieldValue.serverTimestamp(),
+        },
+        // No merge: this must fail if the doc already exists.
+        SetOptions(merge: false),
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Whether the platform already has an owner.
+  Future<bool> isPlatformBootstrapped() async {
+    try {
+      final doc =
+          await _db.collection(Collections.platform).doc('config').get();
+      return doc.exists;
+    } catch (_) {
+      // Rules deny reads to non-super-admins; assume claimed.
+      return true;
+    }
+  }
+
+  // ---- Activity log --------------------------------------------------------
+
+  /// Appends one audit-trail entry. Never throws for the caller's benefit —
+  /// [ActivityService] handles failures.
+  Future<void> writeActivityLog(ActivityLog entry) =>
+      _db.collection(Collections.activityLogs).add(entry.toMap());
+
+  /// The Super Admin's activity feed, newest first.
+  Stream<List<ActivityLog>> watchActivityLogs({int limit = 300}) => _db
+      .collection(Collections.activityLogs)
+      .orderBy('at', descending: true)
+      .limit(limit)
+      .snapshots()
+      .map((s) => s.docs.map(ActivityLog.fromDoc).toList());
 
   // ---- Schools -------------------------------------------------------------
 
@@ -132,6 +189,18 @@ class FirestoreService {
 
   Future<void> updateUser(String uid, Map<String, dynamic> data) =>
       _db.collection(Collections.users).doc(uid).update(data);
+
+  /// Every account on the platform — the Super Admin's user directory.
+  Stream<List<AppUser>> watchAllUsers() => _db
+      .collection(Collections.users)
+      .snapshots()
+      .map((s) => s.docs.map(AppUser.fromDoc).toList()
+        ..sort((a, b) => a.fullName.toLowerCase()
+            .compareTo(b.fullName.toLowerCase())));
+
+  /// Grants or revokes platform Super Admin.
+  Future<void> setSuperAdmin(String uid, bool value) =>
+      updateUser(uid, {'superAdmin': value});
 
   /// Looks a person up by phone number so a Super Admin / school admin can
   /// assign somebody who already has an account.

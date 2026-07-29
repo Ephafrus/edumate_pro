@@ -12,6 +12,9 @@ staff chat in-app, and parents can request a teacher chat that admin approves.
 
 | Area | What's implemented |
 |------|--------------------|
+| **System log (audit trail)** | Every interaction is recorded to an **append-only** `activityLogs` trail — sign-ins, opening the enrollment application, submissions, status changes, attendance scans, payments, broadcasts, academics and admin actions. A **Super Admin reviews the whole platform's activity** in one filterable feed; nobody (including Super Admins) can edit or delete an entry |
+| **User directory** | Super Admin sees **every account**, searches by name/phone/email, filters to people not yet in a school, and **assigns them to a school with a role** — the change reaches that person's app immediately, no re-login |
+| **First-run setup** | The **first person to sign in on a fresh deployment automatically becomes Super Admin** (an atomic one-time claim), so a new install is usable straight away. Everyone after that is a **Parent** unless a Super Admin assigns them admin/principal or a school admin invites them as a teacher |
 | **Multi-school platform** | A **Super Admin** sets schools up and assigns each school's **admins/principals**. Every school's data lives under `schools/{id}/…` and is fully isolated. Anyone assigned to **more than one school** (admin, principal or teacher) sees them all and switches with one tap from the app bar |
 | **Roles** | Super Admin (platform) · School admin · Principal · Teacher · Parent — role-based navigation & route guards, enforced in security rules |
 | **Subjects & academics** | Admin adds **subjects to a class** and assigns the teacher. Teachers create **assessments** and capture **marks per learner per subject** on a batch mark sheet |
@@ -80,12 +83,14 @@ firestore.rules / storage.rules   security rules
    ```bash
    firebase deploy --only firestore,storage
    ```
-6. **Bootstrap the first Super Admin:** sign in once in the app with that
-   person's phone number, then in Firestore edit `users/{uid}` → set
-   `"superAdmin": true`. Everything else happens in the app: the Super Admin
-   creates schools and assigns each school's admin/principal by phone number,
-   and those admins then add teachers themselves. A person's school access
-   activates automatically the next time they sign in.
+6. **Sign in — that's it.** The **first** person to sign in on a fresh
+   deployment automatically becomes the platform **Super Admin** (they claim
+   `platform/config`, which can only ever be claimed once). No console
+   editing needed. From there the Super Admin creates schools and assigns
+   admins/principals from the in-app **Users** directory, and those admins
+   add teachers themselves. Everyone else who signs up is a **Parent** by
+   default. Assignments take effect immediately — the recipient's app is
+   watching their memberships live.
 
 ## Phone authentication (SMS) setup
 

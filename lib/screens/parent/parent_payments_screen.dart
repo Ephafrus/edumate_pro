@@ -6,6 +6,8 @@ import '../../core/constants.dart';
 import '../../core/responsive.dart';
 import '../../models/payment.dart';
 import '../../models/school.dart';
+import '../../models/activity_log.dart';
+import '../../services/activity_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/storage_service.dart';
 import '../../state/auth_controller.dart';
@@ -198,6 +200,9 @@ class _NewPaymentDialogState extends State<_NewPaymentDialog> {
         proofFilename: _proof!.filename,
       ));
       if (!mounted) return;
+      context.read<ActivityService>().log(ActivityAction.paymentSubmitted,
+          target: _learner?.fullName ?? _purpose!,
+          details: 'R ${(amountCents / 100).toStringAsFixed(2)}');
       Navigator.of(context).pop();
       showSnack(context,
           'Payment submitted — the school will review and confirm by email.');

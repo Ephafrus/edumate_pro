@@ -21,6 +21,33 @@ app using school-configured settings.
 
 ## 2. Functional requirements
 
+### System activity log (FR-43…FR-45)
+- **FR-43** Every meaningful interaction is written to an **append-only**
+  `activityLogs` trail: sign-in/out, profile creation, school join/switch,
+  **opening the enrollment application**, application saves/submissions and
+  status changes, learner/class/subject changes, marks, lesson plans,
+  homework, attendance scans, payments and fee actions, broadcasts, chat,
+  calendar events, staff invites and assignments, and platform actions.
+- **FR-44** Only a **Super Admin** can read the feed; it is filterable by
+  category and searchable by person, school or target. Nobody — including
+  Super Admins — can edit or delete an entry (enforced in rules).
+- **FR-45** Logging is fire-and-forget: a failed log write never blocks or
+  breaks the user action it describes.
+
+### Platform bootstrap & user directory (FR-46…FR-48)
+- **FR-46** The **first user to sign in** on an empty deployment atomically
+  claims the platform and becomes its **Super Admin**, so a fresh install is
+  immediately usable without console edits.
+- **FR-47** Every subsequent sign-up is a **Parent** by default, unless a
+  Super Admin has assigned them an admin/principal role or a school admin
+  has invited them as a teacher.
+- **FR-48** The Super Admin has a **user directory**: all accounts, search
+  by name/phone/email, a filter for people not yet in a school, one-tap
+  assignment to a school with a role, membership removal, and granting or
+  revoking Super Admin. Assignments apply **live** — the recipient's app
+  subscribes to their memberships, so a promoted user sees the school
+  without signing out.
+
 ### Multi-school platform (FR-33…FR-36)
 - **FR-33** A **Super Admin** creates a school (name, address, contacts) and
   can suspend it.
@@ -208,6 +235,9 @@ chats/{id}/messages/{id}  senderUid, senderName, text, createdAt
 attendance/{id}        learnerId, learnerName, className, type (checkIn|checkOut),
                        byUid, byName, parentUids[], at
 settings/smtp          host, port, username, password, fromName, fromAddress
+activityLogs/{id}      action, category, actorUid/Name/Role, schoolId/Name,
+                       target, details, at            (global, append-only)
+platform/config        bootstrapped, firstSuperAdminUid   (one-time claim)
 broadcasts/{id}        subject, html, scope (school|schoolClass|learner),
                        classId/Name, learnerId/Name, recipientUids[],
                        emailsSent/Failed, sentByName, createdAt

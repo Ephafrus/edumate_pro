@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'core/theme.dart';
 import 'router/app_router.dart';
+import 'services/activity_service.dart';
 import 'services/auth_service.dart';
 import 'services/firestore_service.dart';
 import 'services/mail_service.dart';
@@ -31,12 +32,15 @@ class EduMateApp extends StatelessWidget {
         Provider<StorageService>(create: (_) => StorageService()),
         Provider<MailService>(
             create: (ctx) => MailService(ctx.read<FirestoreService>())),
+        Provider<ActivityService>(
+            create: (ctx) => ActivityService(ctx.read<FirestoreService>())),
         ChangeNotifierProvider<ThemeController>(
             create: (_) => ThemeController()),
         ChangeNotifierProvider<AuthController>(
           create: (ctx) => AuthController(
             authService: ctx.read<AuthService>(),
             firestore: ctx.read<FirestoreService>(),
+            activity: ctx.read<ActivityService>(),
           ),
         ),
       ],

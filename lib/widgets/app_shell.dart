@@ -49,6 +49,8 @@ class AppShell extends StatelessWidget {
     if (auth.isSuperAdmin) {
       return const [
         NavItem('Schools', Routes.superHome),
+        NavItem('Users', Routes.superUsers),
+        NavItem('System log', Routes.superActivity),
         NavItem('Search', Routes.search),
         NavItem('My profile', Routes.profile),
       ];

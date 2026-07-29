@@ -6,6 +6,8 @@ import '../../core/responsive.dart';
 import '../../models/attendance.dart';
 import '../../models/enums.dart';
 import '../../models/school.dart';
+import '../../models/activity_log.dart';
+import '../../services/activity_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/mail_service.dart';
 import '../../state/auth_controller.dart';
@@ -196,6 +198,10 @@ class _LearnerSheetState extends State<_LearnerSheet> {
     setState(() => _saving = true);
     try {
       await db.recordAttendance(widget.learner, type, by: me);
+      if (mounted) {
+        context.read<ActivityService>().log(ActivityAction.attendanceScanned,
+            target: widget.learner.fullName, details: type.stateLabel);
+      }
 
       // Email every linked parent over the school's SMTP.
       final now = DateTime.now();

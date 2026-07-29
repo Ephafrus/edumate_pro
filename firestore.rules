@@ -58,10 +58,26 @@ service cloud.firestore {
     // A user creates and maintains their own record and can never grant
     // themselves platform powers. Super Admins may read anyone (to assign
     // them to a school) and promote other Super Admins.
+    // The platform-claim doc. A `create` fails if it already exists, so
+    // exactly one user can ever claim a fresh deployment.
+    match /platform/{doc} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+                    && request.resource.data.firstSuperAdminUid
+                        == request.auth.uid;
+      allow update, delete: if isSuperAdmin();
+    }
+
     match /users/{uid} {
       allow read: if isSelf(uid) || isSuperAdmin();
+      // Normally nobody may make themselves a Super Admin. The one
+      // exception is the very first user on an empty deployment, who has
+      // just claimed `platform/config` — otherwise a fresh install would
+      // have nobody able to create schools.
       allow create: if isSelf(uid)
-                    && request.resource.data.get('superAdmin', false) == false;
+                    && (request.resource.data.get('superAdmin', false) == false
+                        || get(/databases/$(database)/documents/platform/config)
+                             .data.firstSuperAdminUid == request.auth.uid);
       allow update: if isSuperAdmin()
                     || (isSelf(uid)
                         && request.resource.data.get('superAdmin', false)
@@ -287,6 +303,17 @@ service cloud.firestore {
     // what powers the school switcher. Constrained to their own uid.
     match /{path=**}/members/{uid} {
       allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // ---- System activity log ---------------------------------------------------
+    // Append-only audit trail. Anyone signed in records their own actions;
+    // only a Super Admin can read the feed; nobody may edit or delete an
+    // entry, so the trail cannot be tampered with.
+    match /activityLogs/{id} {
+      allow read: if isSuperAdmin();
+      allow create: if isSignedIn()
+                    && request.resource.data.actorUid == request.auth.uid;
+      allow update, delete: if false;
     }
 
     // ---- Staff invites ---------------------------------------------------------

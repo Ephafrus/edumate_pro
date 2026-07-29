@@ -4,11 +4,13 @@ import 'package:provider/provider.dart';
 
 import '../../core/responsive.dart';
 import '../../models/academics.dart';
+import '../../models/activity_log.dart';
 import '../../models/app_user.dart';
 import '../../models/application.dart';
 import '../../models/enums.dart';
 import '../../models/school.dart';
 import '../../router/app_router.dart';
+import '../../services/activity_service.dart';
 import '../../services/firestore_service.dart';
 import '../../state/auth_controller.dart';
 import '../../widgets/app_shell.dart';
@@ -101,6 +103,11 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
               onChanged: (v) =>
                   setState(() => _query = v.trim().toLowerCase()),
+              // Logged on submit only, so the audit trail records intent
+              // rather than every keystroke.
+              onSubmitted: (v) => context
+                  .read<ActivityService>()
+                  .log(ActivityAction.searchPerformed, target: v.trim()),
             ),
             const SizedBox(height: 16),
             if (_query.isEmpty)
