@@ -56,16 +56,23 @@ class FirestoreService {
   ///
   /// Returns true if this call claimed it.
   Future<bool> claimPlatformBootstrap(String uid) async {
+    final ref = _db.collection(Collections.platform).doc('config');
     try {
-      await _db.collection(Collections.platform).doc('config').set(
-        {
-          'bootstrapped': true,
-          'firstSuperAdminUid': uid,
-          'createdAt': FieldValue.serverTimestamp(),
-        },
-        // No merge: this must fail if the doc already exists.
-        SetOptions(merge: false),
-      );
+      final existing = await ref.get();
+      if (existing.exists) {
+        // Idempotent: if a previous attempt created the claim but did not
+        // finish promoting the account, let this caller carry on.
+        return (existing.data() ?? const {})['firstSuperAdminUid'] == uid;
+      }
+    } catch (_) {
+      // Unreadable — fall through and let the write decide.
+    }
+    try {
+      await ref.set({
+        'bootstrapped': true,
+        'firstSuperAdminUid': uid,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
       return true;
     } catch (_) {
       return false;

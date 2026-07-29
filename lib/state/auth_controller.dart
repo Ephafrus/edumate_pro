@@ -167,7 +167,35 @@ class AuthController extends ChangeNotifier {
   /// the source of truth.
   Future<AppUser?> _ensureUserRecord(User user) async {
     final existing = await _db.getUser(user.uid);
-    if (existing != null) return existing;
+    if (existing != null) {
+      // An account can predate the platform ever being claimed — for
+      // instance somebody who signed in before any Super Admin existed.
+      // Give them the same chance to claim it, otherwise a deployment whose
+      // only accounts are older than the bootstrap has nobody in charge and
+      // no way in the UI to fix that.
+      if (!existing.superAdmin) {
+        final claimedNow = await _db.claimPlatformBootstrap(user.uid);
+        if (claimedNow) {
+          try {
+            await _db.setSuperAdmin(user.uid, true);
+            _activity.log(
+              ActivityAction.platformBootstrapped,
+              target: existing.phone ?? existing.uid,
+              details: 'existing account claimed the platform',
+              as: ActivityActor.forUser(
+                uid: existing.uid,
+                name: existing.fullName,
+                superAdmin: true,
+              ),
+            );
+            return await _db.getUser(user.uid);
+          } catch (_) {
+            // Rules refused the promotion — carry on as they were.
+          }
+        }
+      }
+      return existing;
+    }
 
     // A brand-new deployment has nobody in charge yet. The first person to
     // sign in claims the platform and becomes its Super Admin; everyone
