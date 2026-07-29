@@ -137,7 +137,7 @@ void main() {
         learner: learner(grade: 'Grade 4'),
         fees: [
           annualFee(grade: 'Grade 4'),
-          FeeStructure(
+          const FeeStructure(
               id: 'f2',
               name: 'Grade 7 fees',
               grade: 'Grade 7',
@@ -295,19 +295,19 @@ void main() {
 
   group('Arrears list', () {
     test('lists only learners who owe, worst first', () {
-      final a = Learner(
+      const a = Learner(
           id: 'a',
           firstName: 'A',
           lastName: 'One',
           grade: 'Grade 4',
           status: LearnerStatus.active);
-      final b = Learner(
+      const b = Learner(
           id: 'b',
           firstName: 'B',
           lastName: 'Two',
           grade: 'Grade 4',
           status: LearnerStatus.active);
-      final gone = Learner(
+      const gone = Learner(
           id: 'c',
           firstName: 'C',
           lastName: 'Three',
