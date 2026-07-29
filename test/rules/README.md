@@ -19,4 +19,13 @@ npm test
 Requires Java (the emulator runs on the JVM). `emulators:exec` starts the
 emulator, runs the suite and shuts down, so nothing is left listening.
 
-The suite loads `../../firestore.rules` — edit the rules, re-run, done.
+Two suites:
+
+* `staff_invite.test.mjs` — the claim path and the ways it must not become a
+  privilege escalation.
+* `claim_sequence.test.mjs` — every write `_claimInvites` performs, in order,
+  as the invited teacher. A denial on any of them surfaces in the app as the
+  same "staff invite claim failed" line, so they are checked one at a time.
+  Run this first when an invite is refused: it says which step is blocked.
+
+Both load `../../firestore.rules` — edit the rules, re-run, done.

@@ -330,15 +330,36 @@ class AuthController extends ChangeNotifier {
       // explain why. This is the branch that fires when the rules allowing
       // an invitee to write their own membership have not been deployed.
       final invite = invites.first;
-      _inviteError = 'Found a ${invite.role.label.toLowerCase()} invite for '
-          '${invite.schoolName.isEmpty ? 'your school' : invite.schoolName} '
-          'but could not activate it (${_reason(e)}).'
-          '${_looksLikePermissionDenied(e) ? ' The school needs to deploy '
-              'the latest Firestore rules — until then staff sign in as '
-              'parents.' : ''}';
-      if (kDebugMode) debugPrint('staff invite claim failed: $e');
+      final school =
+          invite.schoolName.isEmpty ? 'your school' : invite.schoolName;
+      _inviteError =
+          'Found a ${invite.role.label.toLowerCase()} invite for $school but '
+          'could not activate it (${_reason(e)}). ${_activationHint(invite, e)}';
+      // Print the diagnosis, not just the exception — the raw
+      // "permission-denied" says nothing about what to do next.
+      if (kDebugMode) debugPrint('staff invite claim failed: $_inviteError');
     }
     return claimed;
+  }
+
+  /// Which of the two ways this fails, said plainly.
+  ///
+  /// A refused activation means one of exactly two things, and they need
+  /// different people to act, so guessing between them is not good enough.
+  /// An invite whose id is not the derivable one predates the change that
+  /// made invites verifiable — no rules deployment will rescue it, it has to
+  /// be re-issued. Otherwise the rules that permit this write are simply not
+  /// live yet.
+  static String _activationHint(StaffInvite invite, Object e) {
+    if (!_looksLikePermissionDenied(e)) return '';
+    if (invite.id != StaffInvite.docId(invite.schoolId, invite.phone)) {
+      return 'This invite was created by an older version of the app and can '
+          'no longer be verified — ask the school to remove you from Staff '
+          'and add you again.';
+    }
+    return 'The school needs to deploy the latest Firestore rules '
+        '(firebase deploy --only firestore); until then staff sign in as '
+        'parents.';
   }
 
   static bool _looksLikePermissionDenied(Object e) =>
