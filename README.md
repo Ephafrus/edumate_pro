@@ -36,7 +36,11 @@ staff chat in-app, and parents can request a teacher chat that admin approves.
 | **Email notifications (SMTP, no server)** | The **school admin captures the school's SMTP details in-app** (Email settings). All notification email — application status changes, payment reviews, attendance scans, fee receipts and broadcasts — is **sent directly from the app** over SMTP. Every message is logged to a `mailQueue` audit trail; messages composed on web (browsers can't open SMTP sockets) queue in an outbox and auto-send from any staff member's mobile/desktop session |
 | **Broadcast messages** | Admin composes **HTML messages** (toolbar editor + live preview) targeted **per learner, per class or per school**. Recipients get an **in-app notification** (bell badge + announcements feed) and the message is **emailed** to every targeted parent |
 | **School calendar** | Calendar (month view) with events for the **whole school, a class or all parents**. Admin adds any event; teachers add events for their own classes; parents see school/parent events plus their children's class events |
-| **Fees** | Admin **configures fee structures** (per grade/year), sees **learners with outstanding fees**, **records office payments** (with optional emailed receipt), and **bulk-uploads learner payments** from a downloadable **CSV template** — uploads are **staged first** and only create payment records after review & approval |
+| **Fees & invoicing** | Admin sets the **annual fee per grade**, split into monthly installments. Enrolling a child lays out the **whole year's invoice schedule**; a new month's invoices are raised when a manager next opens the finance area (invoice ids are deterministic, so it is safe to run repeatedly). Once-off charges are supported alongside tuition |
+| **Principal approval** | **Only a principal approves payments** — enforced in the security rules, not just the UI. Office staff record receipts that stay **pending**; a principal's own entry is **approved as it is written**; **bulk approval** clears the queue in one pass |
+| **Parent fee account** | **Balance to date**, **monthly installment**, amount paid and the year's total, plus a **reducing-balance statement** of every charge and payment. A payment awaiting approval is shown but never counted as settled. Statements **download as CSV** |
+| **Outstanding fees** | Learners in arrears appear on the **admin and principal dashboards**, worst first, with the total owed |
+| **Payments** | Parents complete a payment form and upload **proof of payment**; **bulk-upload** of learner payments from a downloadable **CSV template**, staged first and only creating records after approval |
 | **In-app chat** | **Staff ↔ staff** chat works immediately. **Parents request a chat with a teacher**; the request (with reason + learner) goes to admin, and messaging unlocks only once **admin approves** |
 | **Home banner** | Every signed-in user's home opens with a **colourful gradient banner**: a time-of-day greeting, their **latest messages**, and up to **3 upcoming events** (sections hide when empty) |
 | **Teacher flow** | My classes → class register of assigned learners; staff chat |
@@ -270,6 +274,21 @@ firebase deploy --only hosting,firestore,storage
 The site goes live at `https://<project-id>.web.app`. **After deploying:** add
 your hosting domain(s) under **Authentication → Settings → Authorized domains**
 so phone sign-in works there.
+
+## Email from the web portal
+
+A browser cannot open a socket to a mail server, so **SMTP never works on the
+web** — messages queue in the outbox and go out when somebody opens the mobile
+or desktop app. If the school runs on the web portal, configure an **HTTPS
+relay** instead under *Email settings*: an endpoint the school owns that
+receives a message and sends it, which a browser *can* call.
+
+`docs/email-relay.md` has a Google Apps Script relay you can paste in, the
+JSON contract, the CORS headers a custom endpoint needs, and why a provider's
+API key must not simply be embedded in the app.
+
+*Send test email* reports what actually happened — a 401, a CORS refusal, a
+timeout, or the provider's own error text — rather than a generic failure.
 
 ## Security-rules tests
 

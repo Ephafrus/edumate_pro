@@ -7,11 +7,14 @@ import '../../models/app_user.dart';
 import '../../models/application.dart';
 import '../../models/chat.dart';
 import '../../models/enums.dart';
+import '../../models/fees.dart';
 import '../../models/payment.dart';
 import '../../models/school.dart';
 import '../../router/app_router.dart';
+import '../../services/fees_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/mail_service.dart';
+import '../../state/auth_controller.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/common.dart';
 import '../../widgets/home_banner.dart';
@@ -193,6 +196,10 @@ class _AttentionList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Approving money is the principal's job, so only they are told about a
+    // queue they can actually clear.
+    final isPrincipal =
+        context.watch<AuthController>().role == UserRole.principal;
     return StreamBuilder<List<EnrollmentApplication>>(
       stream: db.watchApplications(),
       builder: (context, appSnap) {
@@ -214,13 +221,47 @@ class _AttentionList extends StatelessWidget {
                 return StreamBuilder<List<Learner>>(
                   stream: db.watchLearners(),
                   builder: (context, learnerSnap) {
+                  return StreamBuilder<List<Invoice>>(
+                    stream: db.watchInvoices(),
+                    builder: (context, invoiceSnap) {
+                  return StreamBuilder<List<FeeStructure>>(
+                    stream: db.watchFeeStructures(),
+                    builder: (context, feeSnap) {
                     final unassigned = (learnerSnap.data ?? [])
                         .where((l) =>
                             l.status == LearnerStatus.active &&
                             (l.classId == null || l.classId!.isEmpty))
                         .length;
 
+                    final arrears = FeesService.accountsInArrears(
+                      learners: learnerSnap.data ?? const [],
+                      invoices: invoiceSnap.data ?? const [],
+                      payments: paySnap.data ?? const [],
+                      fees: feeSnap.data ?? const [],
+                    );
+                    final owedCents = arrears.fold<int>(
+                        0, (acc, a) => acc + a.balanceCents);
+
                     final rows = <Widget>[
+                      if (arrears.isNotEmpty)
+                        DashboardTile(
+                          icon: Icons.account_balance_wallet_outlined,
+                          title: 'Learners with fees outstanding',
+                          subtitle:
+                              'R ${(owedCents / 100).toStringAsFixed(2)} owed '
+                              'across ${arrears.length} learner'
+                              '${arrears.length == 1 ? '' : 's'}',
+                          badge: '${arrears.length}',
+                          onTap: () => context.go(Routes.adminFees),
+                        ),
+                      if (pending > 0 && isPrincipal)
+                        DashboardTile(
+                          icon: Icons.approval_outlined,
+                          title: 'Payments awaiting your approval',
+                          subtitle: 'Only a principal can approve payments',
+                          badge: '$pending',
+                          onTap: () => context.go(Routes.adminPayments),
+                        ),
                       if (open > 0)
                         DashboardTile(
                           icon: Icons.assignment_outlined,
@@ -284,6 +325,10 @@ class _AttentionList extends StatelessWidget {
                               child: r))
                           .toList(),
                     );
+                    },
+                  );
+                    },
+                  );
                   },
                 );
               },

@@ -89,6 +89,55 @@ class _AdminPaymentsScreenState extends State<AdminPaymentsScreen> {
     }
   }
 
+  /// Approving money is the principal's signature. The rules refuse anyone
+  /// else, so showing the button to an office admin would only produce a
+  /// permission error they cannot act on.
+  static bool _canApprove(BuildContext context) {
+    final auth = context.read<AuthController>();
+    return auth.isSuperAdmin || auth.role == UserRole.principal;
+  }
+
+  /// Approves everything currently waiting, in one pass.
+  Future<void> _approveAll(List<PaymentRecord> pending) async {
+    if (pending.isEmpty) return;
+    // Captured before the dialog: after an await the element may be gone.
+    final db = context.read<FirestoreService>();
+    final byName = context.read<AuthController>().appUser?.fullName ?? '';
+    final activity = context.read<ActivityService>();
+
+    final total = pending.fold<int>(0, (acc, p) => acc + p.amountCents);
+    final ok = await confirmDialog(
+      context,
+      'Approve ${pending.length} payment${pending.length == 1 ? '' : 's'}?',
+      'R ${(total / 100).toStringAsFixed(2)} in total. Each parent is '
+          'notified and the amounts come off their balances.',
+      confirmLabel: 'Approve all',
+    );
+    if (!ok) return;
+    setState(() => _bulkRunning = true);
+    try {
+      final result = await db.approvePayments(
+        pending.map((p) => p.id).toList(),
+        byName: byName,
+        note: 'Approved in bulk by the principal',
+      );
+      activity.log(ActivityAction.paymentReviewed,
+          target: 'Bulk approval',
+          details: '${result.approved} approved, ${result.failed} failed');
+      if (!mounted) return;
+      showSnack(
+          context,
+          result.failed == 0
+              ? '${result.approved} payment(s) approved.'
+              : '${result.approved} approved, ${result.failed} could not be '
+                  'approved — open them individually to see why.');
+    } finally {
+      if (mounted) setState(() => _bulkRunning = false);
+    }
+  }
+
+  bool _bulkRunning = false;
+
   @override
   Widget build(BuildContext context) {
     final db = context.read<FirestoreService>();
@@ -106,7 +155,64 @@ class _AdminPaymentsScreenState extends State<AdminPaymentsScreen> {
                     .textTheme
                     .headlineSmall
                     ?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text(
+                _canApprove(context)
+                    ? 'Approving a payment is your signature — it settles the '
+                        'amount against the parent’s balance and notifies '
+                        'them. Office staff can record payments but cannot '
+                        'approve them.'
+                    : 'You can record payments here; the principal approves '
+                        'them.',
+                style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 12),
+            if (_canApprove(context))
+              StreamBuilder<List<PaymentRecord>>(
+                stream: db.watchPayments(),
+                builder: (context, snap) {
+                  final pending = (snap.data ?? const <PaymentRecord>[])
+                      .where((p) => p.status == PaymentStatus.pending)
+                      .toList();
+                  if (pending.isEmpty) return const SizedBox.shrink();
+                  final total =
+                      pending.fold<int>(0, (acc, p) => acc + p.amountCents);
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.approval_outlined),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                  '${pending.length} payment'
+                                  '${pending.length == 1 ? '' : 's'} waiting '
+                                  '— R ${(total / 100).toStringAsFixed(2)}',
+                                  style:
+                                      Theme.of(context).textTheme.bodyMedium),
+                            ),
+                            FilledButton.icon(
+                              onPressed: _bulkRunning
+                                  ? null
+                                  : () => _approveAll(pending),
+                              icon: _bulkRunning
+                                  ? const SizedBox(
+                                      height: 16,
+                                      width: 16,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2))
+                                  : const Icon(Icons.done_all, size: 18),
+                              label: const Text('Approve all'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
             Row(
               children: [
                 ChoiceChip(
@@ -197,20 +303,28 @@ class _AdminPaymentsScreenState extends State<AdminPaymentsScreen> {
                                         ),
                                       if (p.status ==
                                           PaymentStatus.pending) ...[
-                                        FilledButton.icon(
-                                          onPressed: () => _review(
-                                              p, PaymentStatus.approved),
-                                          icon: const Icon(Icons.check,
-                                              size: 18),
-                                          label: const Text('Approve'),
-                                        ),
-                                        OutlinedButton.icon(
-                                          onPressed: () => _review(
-                                              p, PaymentStatus.rejected),
-                                          icon: const Icon(Icons.close,
-                                              size: 18),
-                                          label: const Text('Reject'),
-                                        ),
+                                        if (_canApprove(context)) ...[
+                                          FilledButton.icon(
+                                            onPressed: () => _review(
+                                                p, PaymentStatus.approved),
+                                            icon: const Icon(Icons.check,
+                                                size: 18),
+                                            label: const Text('Approve'),
+                                          ),
+                                          OutlinedButton.icon(
+                                            onPressed: () => _review(
+                                                p, PaymentStatus.rejected),
+                                            icon: const Icon(Icons.close,
+                                                size: 18),
+                                            label: const Text('Reject'),
+                                          ),
+                                        ] else
+                                          const Chip(
+                                            avatar: Icon(Icons.lock_outline,
+                                                size: 16),
+                                            label: Text(
+                                                'Waiting for the principal'),
+                                          ),
                                       ],
                                     ],
                                   ),

@@ -11,6 +11,7 @@ import '../../models/enums.dart';
 import '../../models/fees.dart';
 import '../../models/payment.dart';
 import '../../models/school.dart';
+import '../../services/fees_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/mail_service.dart';
 import '../../state/auth_controller.dart';
@@ -23,11 +24,29 @@ import '../../widgets/common.dart';
 ///  * **Record** — capture a payment taken at the office;
 ///  * **Imports** — bulk upload learner payments from the CSV template;
 ///    uploads are **staged** and only create payment records once approved.
+/// Raises any invoices the school is missing for this year.
+///
+/// There is no server to run this on the first of the month, so the finance
+/// screen does it: whichever manager opens it first in a new month raises
+/// that month's invoices. Deterministic ids make it safe to run on every
+/// load — a second run writes nothing.
+void _ensureInvoices(BuildContext context) {
+  final db = context.read<FirestoreService>();
+  Future<void>.microtask(() async {
+    try {
+      await db.ensureInvoicesForYear();
+    } catch (_) {
+      // Billing catches up on the next open; never block the screen.
+    }
+  });
+}
+
 class AdminFeesScreen extends StatelessWidget {
   const AdminFeesScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    _ensureInvoices(context);
     return AppShell(
       title: 'Fees',
       breadcrumb: 'Dashboard > Fees',
@@ -187,6 +206,10 @@ class _EditFeeDialogState extends State<_EditFeeDialog> {
   late final TextEditingController _year;
   late String _grade;
   DateTime? _dueDate;
+  FeeCycle _cycle = FeeCycle.annual;
+  int _installments = 12;
+  int _firstMonth = 1;
+  int _dueDay = 7;
   bool _saving = false;
 
   @override
@@ -200,6 +223,10 @@ class _EditFeeDialogState extends State<_EditFeeDialog> {
         text: (e?.year ?? DateTime.now().year).toString());
     _grade = e?.grade ?? kAllGrades;
     _dueDate = e?.dueDate;
+    _cycle = e?.cycle ?? FeeCycle.annual;
+    _installments = e?.installments ?? 12;
+    _firstMonth = e?.firstMonth ?? 1;
+    _dueDay = e?.dueDay ?? 7;
   }
 
   @override
@@ -223,6 +250,10 @@ class _EditFeeDialogState extends State<_EditFeeDialog> {
         grade: _grade,
         year: int.tryParse(_year.text),
         amountCents: amountCents,
+        cycle: _cycle,
+        installments: _installments,
+        firstMonth: _firstMonth,
+        dueDay: _dueDay,
         dueDate: _dueDate,
       );
       if (widget.existing == null) {
@@ -233,15 +264,42 @@ class _EditFeeDialogState extends State<_EditFeeDialog> {
           'grade': data.grade,
           'year': data.year,
           'amountCents': data.amountCents,
+          'cycle': data.cycle.name,
+          'installments': data.installments,
+          'firstMonth': data.firstMonth,
+          'dueDay': data.dueDay,
           'dueDate': _dueDate,
         });
       }
-      if (mounted) Navigator.of(context).pop();
+      // Changing what a grade owes has to reach the learners in it, or the
+      // fee is set but nobody is billed for it.
+      final raised = await db.ensureInvoicesForYear(year: data.year);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      if (raised > 0) {
+        showSnack(context, 'Saved — $raised invoice(s) raised.');
+      }
     } catch (e) {
       if (mounted) showSnack(context, 'Could not save: $e');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  /// Shows the parent-facing number as the amount is typed — the figure the
+  /// office will be asked about is the monthly one, not the annual total.
+  String _monthlyHint() {
+    final rand = double.tryParse(_amount.text.replaceAll(',', '.'));
+    if (rand == null || rand <= 0 || _installments <= 0) {
+      return 'Split into monthly installments';
+    }
+    final parts =
+        FeesService.installmentAmounts((rand * 100).round(), _installments);
+    final first = (parts.first / 100).toStringAsFixed(2);
+    final rest = (parts.last / 100).toStringAsFixed(2);
+    return first == rest
+        ? '$_installments × R $first per month'
+        : 'R $first then ${_installments - 1} × R $rest per month';
   }
 
   @override
@@ -274,18 +332,92 @@ class _EditFeeDialogState extends State<_EditFeeDialog> {
                 onChanged: (v) => setState(() => _grade = v ?? _grade),
               ),
               const SizedBox(height: 12),
+              SegmentedButton<FeeCycle>(
+                segments: const [
+                  ButtonSegment(
+                      value: FeeCycle.annual, label: Text('Annual tuition')),
+                  ButtonSegment(
+                      value: FeeCycle.onceOff, label: Text('Once-off')),
+                ],
+                selected: {_cycle},
+                onSelectionChanged: (v) => setState(() => _cycle = v.first),
+              ),
+              const SizedBox(height: 12),
               TextFormField(
                 controller: _amount,
-                decoration: const InputDecoration(
-                    labelText: 'Amount (R)', prefixText: 'R '),
+                decoration: InputDecoration(
+                  labelText: _cycle == FeeCycle.annual
+                      ? "Amount for the year (R)"
+                      : 'Amount (R)',
+                  prefixText: 'R ',
+                  helperText: _cycle == FeeCycle.annual
+                      ? _monthlyHint()
+                      : 'Charged once',
+                ),
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
+                onChanged: (_) => setState(() {}),
                 validator: (v) {
                   final d = double.tryParse((v ?? '').replaceAll(',', '.'));
                   if (d == null || d <= 0) return 'Enter a valid amount';
                   return null;
                 },
               ),
+              if (_cycle == FeeCycle.annual) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<int>(
+                        initialValue: _installments,
+                        decoration:
+                            const InputDecoration(labelText: 'Installments'),
+                        items: const [1, 4, 10, 11, 12]
+                            .map((n) => DropdownMenuItem(
+                                value: n, child: Text('$n')))
+                            .toList(),
+                        onChanged: (v) =>
+                            setState(() => _installments = v ?? 12),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DropdownButtonFormField<int>(
+                        initialValue: _firstMonth,
+                        isExpanded: true,
+                        decoration:
+                            const InputDecoration(labelText: 'First month'),
+                        items: const [
+                          'January', 'February', 'March', 'April', 'May',
+                          'June', 'July', 'August', 'September', 'October',
+                          'November', 'December',
+                        ]
+                            .asMap()
+                            .entries
+                            .map((e) => DropdownMenuItem(
+                                value: e.key + 1,
+                                child: Text(e.value,
+                                    overflow: TextOverflow.ellipsis)))
+                            .toList(),
+                        onChanged: (v) => setState(() => _firstMonth = v ?? 1),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DropdownButtonFormField<int>(
+                        initialValue: _dueDay,
+                        decoration:
+                            const InputDecoration(labelText: 'Due day'),
+                        items: const [1, 5, 7, 15, 25, 28]
+                            .map((d) => DropdownMenuItem(
+                                value: d, child: Text('$d')))
+                            .toList(),
+                        onChanged: (v) => setState(() => _dueDay = v ?? 7),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 12),
               TextFormField(
                 controller: _year,

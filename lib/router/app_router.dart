@@ -31,6 +31,7 @@ import '../screens/parent/child_progress_screen.dart';
 import '../screens/parent/application_wizard_screen.dart';
 import '../screens/parent/parent_home_screen.dart';
 import '../screens/parent/parent_payments_screen.dart';
+import '../screens/parent/parent_statement_screen.dart';
 import '../screens/staff/scan_screen.dart';
 import '../screens/superadmin/super_activity_screen.dart';
 import '../screens/superadmin/super_school_detail_screen.dart';
@@ -51,6 +52,7 @@ class Routes {
   static const parentHome = '/parent';
   static const apply = '/parent/apply';
   static const parentPayments = '/parent/payments';
+  static const parentFees = '/parent/fees';
   static String applicationDetail(String id) => '/parent/applications/$id';
 
   /// A parent's view of one child's progress (marks, homework, lessons).
@@ -233,6 +235,9 @@ GoRouter createRouter(AuthController auth) {
         builder: (_, state) => ApplicationWizardScreen(
             applicationId: state.uri.queryParameters['id']),
       ),
+      GoRoute(
+          path: Routes.parentFees,
+          builder: (_, __) => const ParentStatementScreen()),
       GoRoute(
           path: Routes.parentPayments,
           builder: (_, __) => const ParentPaymentsScreen()),

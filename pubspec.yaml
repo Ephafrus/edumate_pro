@@ -31,6 +31,7 @@ dependencies:
   table_calendar: ^3.1.2
   csv: ^6.0.0
   http: ^1.2.2
+  web: ^1.1.0
 
 dev_dependencies:
   flutter_test:
