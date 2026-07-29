@@ -117,6 +117,8 @@ enum ActivityAction {
   // Platform (Super Admin)
   schoolCreated,
   schoolUpdated,
+  schoolViewed,
+  schoolViewExited,
   superAdminGranted,
   platformBootstrapped;
 
@@ -192,6 +194,8 @@ enum ActivityAction {
         return ActivityCategory.administration;
       case ActivityAction.schoolCreated:
       case ActivityAction.schoolUpdated:
+      case ActivityAction.schoolViewed:
+      case ActivityAction.schoolViewExited:
       case ActivityAction.superAdminGranted:
       case ActivityAction.platformBootstrapped:
         return ActivityCategory.platform;
@@ -309,6 +313,10 @@ enum ActivityAction {
         return 'created a school';
       case ActivityAction.schoolUpdated:
         return 'updated a school';
+      case ActivityAction.schoolViewed:
+        return 'signed in to a school as Super Admin';
+      case ActivityAction.schoolViewExited:
+        return 'left a school view';
       case ActivityAction.superAdminGranted:
         return 'granted Super Admin';
       case ActivityAction.platformBootstrapped:

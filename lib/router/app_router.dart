@@ -142,8 +142,14 @@ GoRouter createRouter(AuthController auth) {
         return Routes.profile;
       }
 
-      // Super Admins work above schools: the console is theirs alone.
+      // Super Admins work above schools. When one signs in to a school for
+      // oversight, they get that school's admin area as well as the console.
       if (auth.isSuperAdmin) {
+        if (auth.isViewingSchool) {
+          // Parent-only journeys stay out of oversight mode.
+          if (loc.startsWith('/parent')) return Routes.adminHome;
+          return null;
+        }
         const allowed = {Routes.profile, Routes.settings};
         if (!loc.startsWith(Routes.superHome) && !allowed.contains(loc)) {
           return Routes.superHome;

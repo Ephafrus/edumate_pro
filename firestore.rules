@@ -36,22 +36,32 @@ service cloud.firestore {
     function memberPath(schoolId) {
       return /databases/$(database)/documents/schools/$(schoolId)/members/$(request.auth.uid);
     }
+    // A Super Admin oversees every school, so they satisfy the membership
+    // checks everywhere without holding a member document. Without this,
+    // signing in to a school for oversight would be denied on every read.
     function isMember(schoolId) {
-      return isSignedIn() && exists(memberPath(schoolId));
+      return isSignedIn() && (isSuperAdmin() || exists(memberPath(schoolId)));
     }
     function myRole(schoolId) {
       return get(memberPath(schoolId)).data.role;
     }
     // Admins and principals both run the school.
     function isManager(schoolId) {
-      return isMember(schoolId) && myRole(schoolId) in ['admin', 'principal'];
+      return isSignedIn()
+        && (isSuperAdmin()
+            || (exists(memberPath(schoolId))
+                && myRole(schoolId) in ['admin', 'principal']));
     }
     function isStaff(schoolId) {
-      return isMember(schoolId)
-        && myRole(schoolId) in ['admin', 'principal', 'teacher'];
+      return isSignedIn()
+        && (isSuperAdmin()
+            || (exists(memberPath(schoolId))
+                && myRole(schoolId) in ['admin', 'principal', 'teacher']));
     }
     function isParentAt(schoolId) {
-      return isMember(schoolId) && myRole(schoolId) == 'parent';
+      return isSignedIn()
+        && exists(memberPath(schoolId))
+        && myRole(schoolId) == 'parent';
     }
 
     // ---- Global accounts ---------------------------------------------------

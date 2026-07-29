@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/responsive.dart';
@@ -6,6 +7,7 @@ import '../../models/app_user.dart';
 import '../../models/enums.dart';
 import '../../models/school.dart';
 import '../../services/auth_service.dart';
+import '../../router/app_router.dart';
 import '../../services/firestore_service.dart';
 import '../../state/auth_controller.dart';
 import '../../widgets/app_shell.dart';
@@ -68,6 +70,21 @@ class SuperSchoolDetailScreen extends StatelessWidget {
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () async {
+                    await context.read<AuthController>().enterSchool(school);
+                    if (context.mounted) context.go(Routes.adminHome);
+                  },
+                  icon: const Icon(Icons.login),
+                  label: Text('Sign in to ${school.name}'),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                    'Opens the school exactly as its admin sees it — learners, '
+                    'classes, applications, payments and settings. Everything '
+                    'you do there is recorded in the system log.',
+                    style: Theme.of(context).textTheme.bodySmall),
                 const SizedBox(height: 12),
                 SectionCard(
                   title: 'School details',

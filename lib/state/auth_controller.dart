@@ -44,6 +44,11 @@ class AuthController extends ChangeNotifier {
 
   AppUser? _appUser;
   List<SchoolMembership> _memberships = const [];
+
+  /// A Super Admin who has signed in to a specific school to run it. They
+  /// hold no membership there — this is an explicit, audited oversight mode,
+  /// shown with a persistent banner and exited with one tap.
+  School? _viewingSchool;
   bool _initialised = false;
   bool _busy = false;
   String? _error;
@@ -63,6 +68,34 @@ class AuthController extends ChangeNotifier {
   /// Platform-level Super Admin: sets schools up and assigns their admins.
   bool get isSuperAdmin => _appUser?.superAdmin ?? false;
 
+  /// The school a Super Admin is currently working inside, if any.
+  School? get viewingSchool => _viewingSchool;
+  bool get isViewingSchool => isSuperAdmin && _viewingSchool != null;
+
+  /// A Super Admin signs in to a school to see and manage it exactly as its
+  /// admin would. Audited on both entry and exit.
+  Future<void> enterSchool(School school) async {
+    if (!isSuperAdmin) return;
+    _viewingSchool = school;
+    _db.activeSchoolId = school.id;
+    _refreshActor();
+    _activity.log(ActivityAction.schoolViewed,
+        target: school.name, details: 'Super Admin oversight');
+    notifyListeners();
+  }
+
+  /// Returns to the platform console.
+  Future<void> exitSchool() async {
+    final left = _viewingSchool;
+    _viewingSchool = null;
+    _db.activeSchoolId = activeMembership?.schoolId;
+    _refreshActor();
+    if (left != null) {
+      _activity.log(ActivityAction.schoolViewExited, target: left.name);
+    }
+    notifyListeners();
+  }
+
   /// The membership for the school currently being worked in.
   SchoolMembership? get activeMembership {
     if (_memberships.isEmpty) return null;
@@ -73,11 +106,15 @@ class AuthController extends ChangeNotifier {
     return _memberships.first;
   }
 
-  String? get activeSchoolId => activeMembership?.schoolId;
-  String get activeSchoolName => activeMembership?.schoolName ?? '';
+  String? get activeSchoolId =>
+      _viewingSchool?.id ?? activeMembership?.schoolId;
+  String get activeSchoolName =>
+      _viewingSchool?.name ?? activeMembership?.schoolName ?? '';
 
-  /// Role **at the active school** — drives navigation and permissions.
-  UserRole? get role => activeMembership?.role;
+  /// Role **at the active school** — drives navigation and permissions. A
+  /// Super Admin inside a school acts with admin rights there.
+  UserRole? get role =>
+      isViewingSchool ? UserRole.admin : activeMembership?.role;
 
   /// A signed-in user who belongs to no school yet: parents pick one to
   /// apply to; staff wait for their school to invite them. Super Admins
@@ -95,6 +132,7 @@ class AuthController extends ChangeNotifier {
   String get homePath {
     if (!isAuthenticated) return '/login';
     if (needsProfile) return '/profile';
+    if (isViewingSchool) return '/admin';
     if (isSuperAdmin) return '/super';
     if (needsSchool) return '/join';
     switch (role) {
@@ -237,6 +275,7 @@ class AuthController extends ChangeNotifier {
 
   /// Points the database at the active school and remembers the choice.
   Future<void> _applyActiveSchool(String uid) async {
+    if (isViewingSchool) return; // oversight mode owns the active school
     final active = activeMembership;
     _db.activeSchoolId = active?.schoolId;
     _refreshActor();
@@ -261,9 +300,9 @@ class AuthController extends ChangeNotifier {
       uid: u.uid,
       name: u.fullName,
       superAdmin: u.superAdmin,
-      role: m?.role,
-      schoolId: m?.schoolId,
-      schoolName: m?.schoolName ?? '',
+      role: isViewingSchool ? UserRole.admin : m?.role,
+      schoolId: _viewingSchool?.id ?? m?.schoolId,
+      schoolName: _viewingSchool?.name ?? m?.schoolName ?? '',
     );
   }
 
@@ -466,6 +505,7 @@ class AuthController extends ChangeNotifier {
     await _auth.signOut();
     _appUser = null;
     _memberships = const [];
+    _viewingSchool = null;
     _db.activeSchoolId = null;
     _activity.actor = null;
     notifyListeners();

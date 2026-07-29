@@ -118,6 +118,18 @@ class SuperSchoolsScreen extends StatelessWidget {
                                   if (!s.active)
                                     const StatusChip(
                                         'Suspended', Colors.orange),
+                                  IconButton(
+                                    tooltip: 'Sign in to this school',
+                                    icon: const Icon(Icons.login),
+                                    onPressed: () async {
+                                      await context
+                                          .read<AuthController>()
+                                          .enterSchool(s);
+                                      if (context.mounted) {
+                                        context.go(Routes.adminHome);
+                                      }
+                                    },
+                                  ),
                                   const Icon(Icons.chevron_right),
                                 ],
                               ),

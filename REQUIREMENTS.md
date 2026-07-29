@@ -48,6 +48,13 @@ app using school-configured settings.
   subscribes to their memberships, so a promoted user sees the school
   without signing out.
 
+### Super Admin school oversight (FR-49)
+- **FR-49** A Super Admin can **sign in to any school** from the console and
+  use its full admin area, without holding a membership there. The mode is
+  visible at all times (banner + exit), audited on entry and exit, and
+  backed by security rules that grant Super Admins access to every school's
+  data.
+
 ### Multi-school platform (FR-33…FR-36)
 - **FR-33** A **Super Admin** creates a school (name, address, contacts) and
   can suspend it.

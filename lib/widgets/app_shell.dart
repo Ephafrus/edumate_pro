@@ -46,6 +46,18 @@ class AppShell extends StatelessWidget {
     if (auth.needsProfile) {
       return const [NavItem('My profile', Routes.profile)];
     }
+    if (auth.isSuperAdmin && auth.isViewingSchool) {
+      // Same tools the school's own admin has, plus a way back.
+      return const [
+        NavItem('Dashboard', Routes.adminHome),
+        NavItem('Search', Routes.search),
+        NavItem('Learners', Routes.adminLearners),
+        NavItem('Applications', Routes.adminApplications),
+        NavItem('Payments', Routes.adminPayments),
+        NavItem('Fees', Routes.adminFees),
+        NavItem('Platform console', Routes.superHome),
+      ];
+    }
     if (auth.isSuperAdmin) {
       return const [
         NavItem('Schools', Routes.superHome),
@@ -158,6 +170,7 @@ class AppShell extends StatelessWidget {
       drawer: isDesktop ? null : _NavDrawer(items: items, auth: auth),
       body: Column(
         children: [
+          if (auth.isViewingSchool) const _OversightBanner(),
           if (breadcrumb != null)
             Container(
               width: double.infinity,
@@ -171,6 +184,50 @@ class AppShell extends StatelessWidget {
           ),
           const _Footer(),
         ],
+      ),
+    );
+  }
+}
+
+/// Persistent reminder that a Super Admin is working inside a school rather
+/// than as its staff, with a one-tap way back to the platform console.
+class _OversightBanner extends StatelessWidget {
+  const _OversightBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthController>();
+    final school = auth.viewingSchool;
+    if (school == null) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+
+    return Material(
+      color: scheme.tertiaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            Icon(Icons.visibility,
+                size: 18, color: scheme.onTertiaryContainer),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Signed in to ${school.name} as Super Admin — actions here '
+                'are recorded in the system log.',
+                style: TextStyle(
+                    color: scheme.onTertiaryContainer, fontSize: 13),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: () async {
+                await context.read<AuthController>().exitSchool();
+                if (context.mounted) context.go(Routes.superHome);
+              },
+              icon: const Icon(Icons.logout, size: 16),
+              label: const Text('Exit school'),
+            ),
+          ],
+        ),
       ),
     );
   }
